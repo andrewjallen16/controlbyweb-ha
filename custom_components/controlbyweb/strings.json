@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to a ControlByWeb 400 Series device",
+        "description": "Use the Administrator login, or the User login if you enabled a Control Page password. Leave the password blank if none is set (factory default).",
+        "data": {
+          "host": "IP address or hostname",
+          "port": "Port",
+          "username": "Username",
+          "password": "Password",
+          "ssl": "Use HTTPS (self-signed certificates are accepted)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-enter credentials",
+        "data": { "username": "Username", "password": "Password" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the device or read /state.json",
+      "invalid_auth": "Invalid username or password"
+    },
+    "abort": {
+      "already_configured": "This device is already configured",
+      "reauth_successful": "Credentials updated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": { "scan_interval": "Polling interval (seconds)" }
+      }
+    }
+  }
+}
