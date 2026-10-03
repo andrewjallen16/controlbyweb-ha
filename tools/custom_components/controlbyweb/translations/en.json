@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to a ControlByWeb 400 Series device",
+        "description": "Works with 400 series modules (X-401, X-404, X-408, X-410, X-420 ...) and older WebRelay units (X-WR-1R12). The protocol is detected automatically. Use the Administrator login, or the User login if you enabled a Control Page password; leave the password blank if none is set.",
+        "data": {
+          "host": "IP address or hostname",
+          "port": "Port",
+          "username": "Username",
+          "password": "Password",
+          "ssl": "Use HTTPS (self-signed certificates are accepted)",
+          "model": "Model (only used to label the device)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-enter credentials",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the device or read /state.json",
+      "invalid_auth": "Invalid username or password"
+    },
+    "abort": {
+      "already_configured": "This device is already configured",
+      "reauth_successful": "Credentials updated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Polling interval (seconds, minimum 3)",
+          "onewire_unit": "Fallback unit for 1-Wire sensors (only used if the device doesn't report one)"
+        }
+      }
+    }
+  }
+}
