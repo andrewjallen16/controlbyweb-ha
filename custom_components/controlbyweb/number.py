@@ -6,7 +6,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CBWConfigEntry
-from .const import PREFIX_ANALOG_OUTPUT, PREFIX_REGISTER, indexed_keys, to_float
+from .const import (
+    PREFIX_ANALOG_OUTPUT,
+    PREFIX_REGISTER,
+    indexed_keys,
+    is_configured,
+    to_float,
+)
 from .entity import CBWEntity
 
 
@@ -15,10 +21,13 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     entities: list[CBWNumber] = []
-    for key, n in indexed_keys(coordinator.data, PREFIX_REGISTER):
-        entities.append(CBWNumber(coordinator, key, f"Register {n}"))
-    for key, n in indexed_keys(coordinator.data, PREFIX_ANALOG_OUTPUT):
-        entities.append(CBWNumber(coordinator, key, f"Analog output {n}"))
+    data = coordinator.data
+    for key, n in indexed_keys(data, PREFIX_REGISTER):
+        if is_configured(data[key]):  # unused registers are reported as "x.x"
+            entities.append(CBWNumber(coordinator, key, f"Register {n}"))
+    for key, n in indexed_keys(data, PREFIX_ANALOG_OUTPUT):
+        if is_configured(data[key]):
+            entities.append(CBWNumber(coordinator, key, f"Analog output {n}"))
     async_add_entities(entities)
 
 

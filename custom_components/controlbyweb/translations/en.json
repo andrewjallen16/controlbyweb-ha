@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to a ControlByWeb 400 Series device",
-        "description": "Use the Administrator login, or the User login if you enabled a Control Page password. Leave the password blank if none is set (factory default).",
+        "title": "Connect to a ControlByWeb 400 series module",
+        "description": "For 400 series modules (X-400, X-401, X-404, X-405/406, X-408, X-410, X-412, X-417, X-418, X-420). Use the Administrator login, or the User login if you enabled a Control Page password; leave the password blank if none is set.",
         "data": {
           "host": "IP address or hostname",
           "port": "Port",
@@ -14,12 +14,23 @@
       },
       "reauth_confirm": {
         "title": "Re-enter credentials",
-        "data": { "username": "Username", "password": "Password" }
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "model": {
+        "title": "Which model is this?",
+        "description": "Connected. Found: {summary}.\nThe model is shown on the device in Home Assistant. The module can't report its own model (and may include I/O linked from other modules), so this is a best guess; please confirm or change it.",
+        "data": {
+          "model": "Model"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not reach the device or read /state.json",
-      "invalid_auth": "Invalid username or password"
+      "invalid_auth": "Invalid username or password",
+      "unsupported_device": "The device answered, but not like a 400 series module (no state.json). Other ControlByWeb families, such as older WebRelays, are not supported."
     },
     "abort": {
       "already_configured": "This device is already configured",
@@ -29,7 +40,11 @@
   "options": {
     "step": {
       "init": {
-        "data": { "scan_interval": "Polling interval (seconds)" }
+        "data": {
+          "model": "Model (shown on the device)",
+          "scan_interval": "Polling interval (seconds, minimum 3)",
+          "onewire_unit": "Fallback unit for 1-Wire sensors (only used if the device doesn't report one)"
+        }
       }
     }
   }

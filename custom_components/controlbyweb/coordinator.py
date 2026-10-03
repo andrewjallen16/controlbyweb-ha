@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import CBWAuthError, CBWClient, CBWError
+from .api import CBWAuthError, CBWError, _BaseClient
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class CBWCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     config_entry: ConfigEntry
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, client: CBWClient
+        self, hass: HomeAssistant, entry: ConfigEntry, client: _BaseClient
     ) -> None:
         super().__init__(
             hass,

@@ -1,11 +1,11 @@
 {
   "domain": "controlbyweb",
-  "name": "ControlByWeb 400 Series",
+  "name": "ControlByWeb",
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/your-user/ha-controlbyweb",
   "issue_tracker": "https://github.com/your-user/ha-controlbyweb/issues",
   "iot_class": "local_polling",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.4.0"
 }
