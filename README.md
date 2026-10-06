@@ -21,7 +21,7 @@ Requires Home Assistant 2026.3 or newer to show the bundled logo (it works on ol
 Not supported: older WebRelay units (e.g. X-WR-1R12) - they have no `state.json`.
 
 ## Install
-1. Copy `custom_components/controlbyweb` into your Home Assistant `config/custom_components/` folder.
+1. Copy `custom_components/controlbyweb` into your Home Assistant `config/custom_components/` folder. If Home Assistant is run as a Docker, copy `custom_components/controlbyweb` to the /data folder.
 2. Restart Home Assistant.
 3. Settings -> Devices & services -> Add integration -> **ControlByWeb**. Enter the IP address and login, then confirm the model. Add the integration once per device.
 
