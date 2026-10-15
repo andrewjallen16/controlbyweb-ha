@@ -3,11 +3,14 @@ from custom_components.controlbyweb.const import (
     MODELS,
     build_name_map,
     describe_state,
+    frequency_input_keys,
     guess_model,
     humanize_name,
     indexed_keys,
     is_configured,
+    normalize_unit,
     parse_value,
+    unhandled_keys,
     vin_keys,
 )
 
@@ -78,3 +81,46 @@ def test_build_name_map_refuses_when_unsure():
     assert build_name_map(state, {"a": "0"}) == {}  # different number of entries
     disagree = {"garageDoor": "9", "relay2": "0", "frontGate": "7", "vin": "55"}
     assert build_name_map(state, disagree) == {}  # values disagree
+
+
+REAL_X420 = {
+    "digitalIO1": "0", "digitalIO2": "0", "analogInput1": "-0", "analogInput2": "-24.18",
+    "analogInput3": "-0.01", "analogInput4": "5", "frequencyInput1": "0.0", "vin": "22.3",
+    "register1": "0", "lat": "41.6796", "long": "-111.8737", "utcTime": "1791710310",
+    "timezoneOffset": "-18000", "serialNumber": "00:0C:C8:06:E9:9A", "minRecRefresh": "3",
+    "downloadSettings": "1",
+}
+
+
+def test_frequency_input_numbered_and_plain():
+    assert frequency_input_keys({"frequencyInput1": "0.0"}) == [("frequencyInput1", 1)]
+    assert frequency_input_keys({"frequencyInput": "0.0"}) == [("frequencyInput", 1)]
+    assert frequency_input_keys({"frequency1": "0"}) == []  # input function, not the X-420 input
+
+
+def test_real_x420_is_recognised():
+    assert guess_model(REAL_X420) == "X-420"
+    assert describe_state(REAL_X420) == "2 digital I/O, 4 analog inputs, 1 register"
+
+
+def test_unreadable_values_include_unit_suffix():
+    for value in ("x.x", "X.X", " x.x ", "x.x F", "", None):
+        assert not is_configured(value), value
+    for value in ("0", "-0", "91.29 F", "x.xy"):
+        assert is_configured(value), value
+
+
+def test_normalize_unit():
+    assert normalize_unit("F") == "\u00b0F"
+    assert normalize_unit("c") == "\u00b0C"
+    assert normalize_unit("Knots") == "kn"
+    assert normalize_unit("MPH") == "mph"
+    assert normalize_unit("kph") == "km/h"
+    assert normalize_unit("psi") == "psi"  # unknown units pass through
+    assert normalize_unit(None) is None
+
+
+def test_unhandled_keys():
+    assert unhandled_keys(REAL_X420) == []  # everything the real X-420 reports is understood or device info
+    assert unhandled_keys({**REAL_X420, "timer1": "0"}) == []  # timers are handled
+    assert unhandled_keys({"relay1": "0", "mysteryTag": "1", "counter7": "2"}) == ["counter7", "mysteryTag"]

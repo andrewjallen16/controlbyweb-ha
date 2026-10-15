@@ -24,8 +24,13 @@ Needs Home Assistant 2025.1 or newer (2026.3+ to show the bundled logo).
 Not supported: older WebRelay units (e.g. X-WR-1R12) - they have no `state.json`.
 
 ## Install
-1. Copy `custom_components/controlbyweb` into your Home Assistant `config/custom_components/` folder.
-2. Restart Home Assistant.
+**HACS (easiest, works for every kind of install):** HACS -> three-dot menu -> Custom repositories -> add this repository as type *Integration*, install, restart.
+
+**Manual:** copy `custom_components/controlbyweb` into a `custom_components` folder inside your Home Assistant configuration folder (the one that contains `configuration.yaml`), then restart.
+- *Home Assistant OS / Supervised:* the folder is `/config`; reach it with the Samba or "Terminal & SSH" add-on.
+- *Home Assistant in Docker (Container):* there is no `/config` on the host. Use the directory you mapped as the container's configuration volume, the one with `configuration.yaml`. Inside the container this is normally `/config`; on some setups it is mapped as `/data`, so copy the folder there. Restart the container afterwards.
+
+Then:
 3. Settings -> Devices & services. Modules whose MAC starts `00:0C:C8` are **discovered automatically**; otherwise use Add integration -> **ControlByWeb** and enter the IP address and login.
 4. Confirm the model. It is shown on the device page and in the device name.
 
@@ -37,13 +42,16 @@ Add the integration once per module. If DHCP gives a module a new IP address, di
 | `relayN` | Switch + "Relay N pulse" button |
 | `digitalInputN`, `digitalION` (X-420) | Binary sensor |
 | `oneWireSensorN` | Sensor (temperature/humidity; unit read from the device) |
-| `analogInputN`, `frequencyInput` (X-420) | Sensor |
+| `analogInputN`, `frequencyInput1` (X-420) | Sensor |
 | `frequencyN`, `countN`, `onTimeN`, `totalOnTimeN` | Sensors, plus "reset" buttons for count / on time / total on time |
 | `vin` / `vin1` | Sensor (volts) |
 | `registerN` | Sensor (read-only by default), or Number if writing is enabled |
 | `analogOutputN` | Number (writable) |
+| `timerN` | Sensor (seconds remaining, read-only; only if the module lists timers in `state.json`) |
 
 - Sensors the device reports as `x.x` (unplugged probe, unused register) are shown as **unavailable**, or skipped if they were never configured. If one is connected or configured later it **appears without reloading** the integration.
+- **Unplugged / once-seen I/O:** an I/O that has been seen keeps its entity and shows as unavailable while it reads `x.x` (for example a 1-Wire probe that is unplugged), and it comes back by itself, including after a restart. Slots that were never in use get no entity.
+- **Upgrading from an earlier version:** a one-time cleanup removes leftover entities for empty 1-Wire/register slots that older versions created (e.g. "1-Wire sensor 2-16"). It runs once per device and also removes anything that happens to be unplugged at that moment; such an entity returns when the sensor reads again. You can also delete any unavailable entity yourself under Settings -> Entities.
 - Entity names are translatable ("Relay 1").
 
 ## Options (Configure button)
@@ -52,6 +60,7 @@ Add the integration once per module. If DHCP gives a module a new IP address, di
 | Model | as chosen | Shown on the device. |
 | Polling interval | 5 s (min 3) | The device's own minimum is 3 s. |
 | Fallback 1-Wire unit | none | Only used if the device doesn't report a unit. |
+| Frequency input unit | none | X-420 only: unit for the scaled frequency input (mph, km/h, m/s, knots or Hz). Only used if the device doesn't report one. |
 | Use I/O names from the device | off | Names entities after the names set on the module (see below). |
 | Allow writing registers | off | Registers become editable Number boxes instead of read-only sensors. |
 
@@ -81,6 +90,10 @@ Device page -> three-dot menu -> **Download diagnostics**. Passwords, usernames,
 ## Notes and limits
 - **X-404 registers:** Modbus readings appear as `registerN`. That's why registers are read-only by default; enabling writes on an X-404 can write to the Modbus device behind a register.
 - **X-417 analog outputs:** the manuals don't give the `state.json` key; `analogOutputN` is assumed and unverified. Values are in the engineering units set on the device and the Number entity does not limit the range, so check your output scaling before writing to a valve or actuator.
+- **X-420 frequency input / wind speed:** the module scales this input with the Slope and Offset you set (e.g. an R.M. Young 5103 wind monitor shown in mph, km/h, m/s or knots), but `state.json` doesn't say which unit you chose. If the device reports one with the value (`showUnits`), it is used; otherwise set **Frequency input unit** under Configure to match the unit you configured on the module. Speed units get the wind-speed device class.
+- **X-420 frequency input units:** with the module's Units field blank and Slope 1 / Offset 0, the value is the raw frequency in Hz; choose **Hz** as the Frequency input unit in that case.
+- **Timers:** the manuals say timers (up to 16, 1-second down counters) exist but don't document their `state.json` tag, so `timerN` is assumed. They are shown read-only; there is no start/clear control because the HTTP syntax for that isn't documented. To check your module: create a timer, assign it a Local Timer Number, then run `python3 tools/probe.py <ip> --password <pw>` and look for `timer1`.
+- **Unrecognised keys:** anything in `state.json` that the integration doesn't use is listed once in the Home Assistant log (Info level) and under `unhandled_keys` in the diagnostics download. If an I/O you expected is missing, that list shows what the module is actually calling it.
 - **X-420 digital I/O** is shown read-only (direction is set on the device; the manuals don't document writing it over HTTP).
 
 ## Security

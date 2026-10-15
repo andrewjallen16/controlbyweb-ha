@@ -15,17 +15,19 @@ from .const import (
     to_float,
 )
 from .entity import CBWEntity, async_setup_dynamic
+from .helpers import registered_keys
 
 
 def _build(entry: CBWConfigEntry, coordinator) -> list[CBWNumber]:
     data = coordinator.data
+    seen = registered_keys(coordinator.hass, entry, "number")  # keep once-seen I/O
     entities: list[CBWNumber] = []
     if entry.options.get(CONF_WRITABLE_REGISTERS):
         for key, n in indexed_keys(data, PREFIX_REGISTER):
-            if is_configured(data[key]):  # unused registers are reported as "x.x"
+            if is_configured(data[key]) or key in seen:  # unused registers read "x.x"
                 entities.append(CBWNumber(coordinator, key, n, "register"))
     for key, n in indexed_keys(data, PREFIX_ANALOG_OUTPUT):
-        if is_configured(data[key]):
+        if is_configured(data[key]) or key in seen:
             entities.append(CBWNumber(coordinator, key, n, "analog_output"))
     return entities
 

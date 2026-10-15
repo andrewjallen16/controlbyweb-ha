@@ -55,12 +55,14 @@
           "scan_interval": "Polling interval (seconds, minimum 3)",
           "onewire_unit": "Fallback unit for 1-Wire sensors",
           "use_device_names": "Use I/O names from the device (experimental)",
-          "writable_registers": "Allow writing registers"
+          "writable_registers": "Allow writing registers",
+          "frequency_unit": "Frequency input unit"
         },
         "data_description": {
           "onewire_unit": "Only used if the device doesn't report a unit itself.",
           "use_device_names": "Names the entities after the names set on the module (read from customState.json). Matching is by position and is only applied when both files agree; see the diagnostics download if it doesn't take effect.",
-          "writable_registers": "Registers are read-only sensors by default. Turn this on to get editable number boxes. On an X-404, registers can hold Modbus device data, so only enable this if you want to write them."
+          "writable_registers": "Registers are read-only sensors by default. Turn this on to get editable number boxes. On an X-404, registers can hold Modbus device data, so only enable this if you want to write them.",
+          "frequency_unit": "X-420 frequency input (for example a wind speed sensor). The module scales it with the slope and offset you set, so Home Assistant needs to know the unit. Only used if the device doesn't report one itself."
         }
       }
     }
@@ -123,6 +125,12 @@
       },
       "register": {
         "name": "Register {number}"
+      },
+      "frequency_input_n": {
+        "name": "Frequency input {number}"
+      },
+      "timer": {
+        "name": "Timer {number}"
       }
     },
     "number": {

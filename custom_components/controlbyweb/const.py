@@ -12,6 +12,7 @@ CONF_SSL = "ssl"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_ONEWIRE_UNIT = "onewire_unit"
+CONF_FREQUENCY_UNIT = "frequency_unit"
 CONF_SHOW_UNITS = "show_units"
 CONF_MODEL = "model"
 CONF_USE_DEVICE_NAMES = "use_device_names"
@@ -69,13 +70,23 @@ PREFIX_ON_TIME = "onTime"
 PREFIX_TOTAL_ON_TIME = "totalOnTime"
 PREFIX_COUNT = "count"
 PREFIX_FREQUENCY = "frequency"
-KEY_FREQUENCY_INPUT = "frequencyInput"  # X-420 dedicated frequency input
+PREFIX_TIMER = "timer"  # name unconfirmed: the manuals list timers but not their state.json tag
+KEY_FREQUENCY_INPUT = "frequencyInput"  # X-420 dedicated input; real units report "frequencyInput1"
 KEY_VIN = "vin"  # some units report "vin", others "vin1"
 KEY_SERIAL = "serialNumber"
 
 # Keys that are device info rather than I/O (excluded when matching custom names)
 NON_IO_KEYS = frozenset(
-    {"lat", "long", "utcTime", "timezoneOffset", KEY_SERIAL, "minRecRefresh", "deviceUptime"}
+    {
+        "lat", "long", "utcTime", "timezoneOffset", KEY_SERIAL,
+        "minRecRefresh", "deviceUptime", "downloadSettings",
+    }
+)
+
+_HANDLED_KEYS = (
+    PREFIX_RELAY, PREFIX_DIGITAL_INPUT, PREFIX_DIGITAL_IO, PREFIX_ONE_WIRE, PREFIX_ANALOG_INPUT,
+    PREFIX_ANALOG_OUTPUT, PREFIX_REGISTER, PREFIX_ON_TIME, PREFIX_TOTAL_ON_TIME, PREFIX_COUNT,
+    PREFIX_FREQUENCY, PREFIX_TIMER, KEY_FREQUENCY_INPUT, KEY_VIN,
 )
 
 MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
@@ -84,8 +95,22 @@ _NAME_SPLIT_RE = re.compile(
     r"(?<=[a-z])(?=[A-Z0-9])|(?<=[0-9])(?=[A-Za-z])|(?<=[A-Z])(?=[A-Z][a-z])"
 )
 
-# Units as printed by the device (showUnits=1) -> Home Assistant units
-UNIT_MAP = {"F": "\u00b0F", "C": "\u00b0C", "%RH": "%"}
+# Units as printed by the device -> Home Assistant units (matched case-insensitively)
+_UNIT_ALIASES = {
+    "f": "\u00b0F", "c": "\u00b0C", "%rh": "%",
+    "mph": "mph", "km/h": "km/h", "kph": "km/h", "kmh": "km/h", "m/s": "m/s", "mps": "m/s",
+    "kn": "kn", "kt": "kn", "kts": "kn", "knot": "kn", "knots": "kn",
+}
+SPEED_UNITS = frozenset({"mph", "km/h", "m/s", "kn"})
+FREQUENCY_UNIT_CHOICES = [UNIT_NONE, "Hz", "mph", "km/h", "m/s", "knots"]
+
+
+def normalize_unit(raw: str | None) -> str | None:
+    """'F' -> degrees F, 'Knots' -> 'kn'; unknown units are passed through unchanged."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    return _UNIT_ALIASES.get(raw.lower(), raw)
 
 
 def indexed_keys(data: dict[str, Any], prefix: str) -> list[tuple[str, int]]:
@@ -98,10 +123,26 @@ def indexed_keys(data: dict[str, Any], prefix: str) -> list[tuple[str, int]]:
     return sorted(found, key=lambda item: item[1])
 
 
+def unhandled_keys(data: dict[str, Any]) -> list[str]:
+    """Keys in state.json this integration doesn't use (for logs and diagnostics)."""
+    return sorted(
+        key
+        for key in data
+        if key not in NON_IO_KEYS
+        and not any(re.fullmatch(rf"{re.escape(p)}\d*", key) for p in _HANDLED_KEYS)
+    )
+
+
 def vin_keys(data: dict[str, Any]) -> list[tuple[str, int]]:
     """X-401 reports 'vin'; X-404 reports 'vin1' (and possibly more)."""
     keys = [(KEY_VIN, 1)] if KEY_VIN in data else []
     return keys + indexed_keys(data, KEY_VIN)
+
+
+def frequency_input_keys(data: dict[str, Any]) -> list[tuple[str, int]]:
+    """X-420 units report 'frequencyInput1'; accept plain 'frequencyInput' too."""
+    keys = [(KEY_FREQUENCY_INPUT, 1)] if KEY_FREQUENCY_INPUT in data else []
+    return keys + indexed_keys(data, KEY_FREQUENCY_INPUT)
 
 
 def parse_value(value: Any) -> tuple[float | None, str | None]:
@@ -118,9 +159,16 @@ def to_float(value: Any) -> float | None:
     return parse_value(value)[0]
 
 
+_UNREADABLE_RE = re.compile(r"^x\.x(\s|$)", re.IGNORECASE)
+
+
 def is_configured(value: Any) -> bool:
-    """Unconfigured/disconnected I/O is reported by the device as 'x.x'."""
-    return value is not None and str(value).strip() not in ("", "x.x")
+    """Unconfigured/disconnected I/O is reported as 'x.x' (possibly followed by a
+    unit when showUnits is on, e.g. 'x.x F')."""
+    if value is None:
+        return False
+    text = str(value).strip()
+    return bool(text) and not _UNREADABLE_RE.match(text)
 
 
 # ---------------------------------------------------------------- device names
@@ -181,7 +229,7 @@ def guess_model(data: dict[str, Any]) -> str:
     registers = len(_configured(data, PREFIX_REGISTER))
     one_wire = len(_configured(data, PREFIX_ONE_WIRE))
 
-    if indexed_keys(data, PREFIX_DIGITAL_IO) or KEY_FREQUENCY_INPUT in data:
+    if indexed_keys(data, PREFIX_DIGITAL_IO) or frequency_input_keys(data):
         return "X-420"
     if indexed_keys(data, PREFIX_ANALOG_OUTPUT):
         return "X-417"
@@ -213,6 +261,7 @@ def describe_state(data: dict[str, Any]) -> str:
         ("analog output", "analog outputs", PREFIX_ANALOG_OUTPUT),
         ("1-Wire sensor", "1-Wire sensors", PREFIX_ONE_WIRE),
         ("register", "registers", PREFIX_REGISTER),
+        ("timer", "timers", PREFIX_TIMER),
     ):
         n = len(_configured(data, prefix))
         if n:

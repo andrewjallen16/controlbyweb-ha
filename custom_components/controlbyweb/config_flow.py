@@ -19,6 +19,7 @@ from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .api import CBWAuthError, CBWConnectionError, CBWError, create_client, detect_client
 from .const import (
+    CONF_FREQUENCY_UNIT,
     CONF_MODEL,
     CONF_ONEWIRE_UNIT,
     CONF_SCAN_INTERVAL,
@@ -31,6 +32,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_USERNAME,
     DOMAIN,
+    FREQUENCY_UNIT_CHOICES,
     KEY_SERIAL,
     MIN_SCAN_INTERVAL,
     MODELS,
@@ -45,6 +47,7 @@ PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWO
 
 class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    MINOR_VERSION = 2  # 2 = created by 0.6.0+: no legacy entities to clean up
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
@@ -198,6 +201,10 @@ class CBWOptionsFlow(OptionsFlow):
                         CONF_ONEWIRE_UNIT,
                         default=opts.get(CONF_ONEWIRE_UNIT, UNIT_NONE),
                     ): vol.In([UNIT_NONE, "\u00b0F", "\u00b0C"]),
+                    vol.Required(
+                        CONF_FREQUENCY_UNIT,
+                        default=opts.get(CONF_FREQUENCY_UNIT, UNIT_NONE),
+                    ): vol.In(FREQUENCY_UNIT_CHOICES),
                     vol.Required(
                         CONF_USE_DEVICE_NAMES,
                         default=opts.get(CONF_USE_DEVICE_NAMES, False),
