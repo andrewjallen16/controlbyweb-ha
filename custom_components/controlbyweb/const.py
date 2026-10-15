@@ -100,6 +100,19 @@ _UNIT_ALIASES = {
     "f": "\u00b0F", "c": "\u00b0C", "%rh": "%",
     "mph": "mph", "km/h": "km/h", "kph": "km/h", "kmh": "km/h", "m/s": "m/s", "mps": "m/s",
     "kn": "kn", "kt": "kn", "kts": "kn", "knot": "kn", "knots": "kn",
+    "v": "V", "mv": "mV", "a": "A", "ma": "mA", "w": "W", "kw": "kW", "va": "VA", "var": "var",
+    "hz": "Hz", "kwh": "kWh", "wh": "Wh", "deg": "\u00b0", "degrees": "\u00b0", "\u00b0": "\u00b0",
+}
+# Normalised unit -> Home Assistant device class value (used for registers / analog inputs,
+# e.g. the readings of a Modbus power meter behind an X-404)
+UNIT_DEVICE_CLASS = {
+    "V": "voltage", "mV": "voltage",
+    "A": "current", "mA": "current",
+    "W": "power", "kW": "power",
+    "VA": "apparent_power", "var": "reactive_power",
+    "Hz": "frequency",
+    "kWh": "energy", "Wh": "energy",
+    "\u00b0C": "temperature", "\u00b0F": "temperature",
 }
 SPEED_UNITS = frozenset({"mph", "km/h", "m/s", "kn"})
 FREQUENCY_UNIT_CHOICES = [UNIT_NONE, "Hz", "mph", "km/h", "m/s", "knots"]

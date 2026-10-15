@@ -10,6 +10,7 @@ from custom_components.controlbyweb.const import (
     is_configured,
     normalize_unit,
     parse_value,
+    UNIT_DEVICE_CLASS,
     unhandled_keys,
     vin_keys,
 )
@@ -124,3 +125,16 @@ def test_unhandled_keys():
     assert unhandled_keys(REAL_X420) == []  # everything the real X-420 reports is understood or device info
     assert unhandled_keys({**REAL_X420, "timer1": "0"}) == []  # timers are handled
     assert unhandled_keys({"relay1": "0", "mysteryTag": "1", "counter7": "2"}) == ["counter7", "mysteryTag"]
+
+
+def test_power_meter_units():
+    # readings of a Modbus power meter behind an X-404 (as seen in Home Assistant)
+    assert normalize_unit("A") == "A" and UNIT_DEVICE_CLASS["A"] == "current"
+    assert normalize_unit("V") == "V" and UNIT_DEVICE_CLASS["V"] == "voltage"
+    assert normalize_unit("W") == "W" and UNIT_DEVICE_CLASS["W"] == "power"
+    assert normalize_unit("VA") == "VA" and UNIT_DEVICE_CLASS["VA"] == "apparent_power"
+    assert normalize_unit("Deg") == "\u00b0" and "\u00b0" not in UNIT_DEVICE_CLASS  # no HA class for angles
+    assert normalize_unit("kwh") == "kWh" and UNIT_DEVICE_CLASS["kWh"] == "energy"
+    assert normalize_unit("hz") == "Hz" and normalize_unit("Hz") == "Hz"
+    assert normalize_unit("psi") == "psi" and "psi" not in UNIT_DEVICE_CLASS  # unknown units pass through
+    assert parse_value("-91.3 Deg") == (-91.3, "Deg")

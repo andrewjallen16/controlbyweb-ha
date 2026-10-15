@@ -24,6 +24,7 @@ from .const import (
     PREFIX_TIMER,
     PREFIX_TOTAL_ON_TIME,
     SPEED_UNITS,
+    UNIT_DEVICE_CLASS,
     UNIT_NONE,
     frequency_input_keys,
     indexed_keys,
@@ -37,6 +38,17 @@ from .entity import CBWEntity, async_setup_dynamic
 from .helpers import registered_keys
 
 DEG_F, DEG_C = "\u00b0F", "\u00b0C"
+
+_DEVICE_CLASSES = {
+    "voltage": SensorDeviceClass.VOLTAGE,
+    "current": SensorDeviceClass.CURRENT,
+    "power": SensorDeviceClass.POWER,
+    "apparent_power": SensorDeviceClass.APPARENT_POWER,
+    "reactive_power": SensorDeviceClass.REACTIVE_POWER,
+    "frequency": SensorDeviceClass.FREQUENCY,
+    "energy": SensorDeviceClass.ENERGY,
+    "temperature": SensorDeviceClass.TEMPERATURE,
+}
 
 
 def _build(entry: CBWConfigEntry, coordinator) -> list[SensorEntity]:
@@ -121,7 +133,24 @@ class CBWSensor(CBWEntity, SensorEntity):
         _, unit = parse_value(self._raw)
         if unit:
             return normalize_unit(unit)
-        return self._attr_native_unit_of_measurement
+        # Defer to Home Assistant: reading self._attr_native_unit_of_measurement directly
+        # raises AttributeError on sensors that never set it (unit-less registers,
+        # analog inputs, counters), and the entity then never gets registered.
+        return super().native_unit_of_measurement
+
+    @property
+    def device_class(self) -> SensorDeviceClass | None:
+        """Fixed classes (supply voltage, durations...) win; otherwise derive it from the
+        unit the device reports, e.g. "3.11 A" -> current, "47.57 W" -> power."""
+        if (fixed := super().device_class) is not None:
+            return fixed
+        return _DEVICE_CLASSES.get(UNIT_DEVICE_CLASS.get(self.native_unit_of_measurement or ""))
+
+    @property
+    def state_class(self) -> SensorStateClass | None:
+        if self.device_class == SensorDeviceClass.ENERGY:
+            return SensorStateClass.TOTAL_INCREASING  # what Home Assistant expects for energy
+        return super().state_class
 
 
 class CBWOneWireSensor(CBWSensor):
