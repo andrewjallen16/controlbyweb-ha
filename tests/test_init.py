@@ -15,6 +15,16 @@ def _eid(hass, domain, key):
     return er.async_get(hass).async_get_entity_id(domain, DOMAIN, f"{UID}_{key}")
 
 
+def _registered(hass):
+    """Everything this integration registered, as 'domain:key' (for failure messages)."""
+    registry = er.async_get(hass)
+    return sorted(
+        f"{ent.domain}:{(ent.unique_id or '').removeprefix(UID + '_')}"
+        for ent in registry.entities.values()
+        if ent.platform == DOMAIN
+    )
+
+
 async def _setup(hass, entry):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -28,7 +38,7 @@ async def test_entities_created(hass, device, entry):
         ("binary_sensor", "digitalInput1"), ("sensor", "oneWireSensor1"),
         ("sensor", "vin1"), ("sensor", "register1"),
     ):
-        assert _eid(hass, domain, key), (domain, key)
+        assert _eid(hass, domain, key), (domain, key, "registered:", _registered(hass))
     # unused slots ("x.x") are skipped, and registers are read-only sensors by default
     assert not _eid(hass, "sensor", "oneWireSensor2")
     assert not _eid(hass, "sensor", "register2")
