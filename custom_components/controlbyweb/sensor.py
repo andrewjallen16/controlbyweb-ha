@@ -1,4 +1,4 @@
-"""Sensors: 1-Wire, analog inputs, frequency, counters, timers, Vin."""
+"""Sensors: 1-Wire, analog inputs, frequency, counters, timers, Vin, registers."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import (
@@ -13,12 +13,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import CBWConfigEntry
 from .const import (
     CONF_ONEWIRE_UNIT,
+    CONF_WRITABLE_REGISTERS,
     KEY_FREQUENCY_INPUT,
     PREFIX_ANALOG_INPUT,
     PREFIX_COUNT,
     PREFIX_FREQUENCY,
     PREFIX_ON_TIME,
     PREFIX_ONE_WIRE,
+    PREFIX_REGISTER,
     PREFIX_TOTAL_ON_TIME,
     UNIT_MAP,
     UNIT_NONE,
@@ -28,15 +30,12 @@ from .const import (
     to_float,
     vin_keys,
 )
-from .entity import CBWEntity
+from .entity import CBWEntity, async_setup_dynamic
 
 DEG_F, DEG_C = "\u00b0F", "\u00b0C"
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: CBWConfigEntry, async_add_entities: AddEntitiesCallback
-) -> None:
-    coordinator = entry.runtime_data
+def _build(entry: CBWConfigEntry, coordinator) -> list[SensorEntity]:
     data = coordinator.data
     fallback = entry.options.get(CONF_ONEWIRE_UNIT, UNIT_NONE)
     fallback = None if fallback == UNIT_NONE else fallback
@@ -44,35 +43,54 @@ async def async_setup_entry(
 
     for key, n in indexed_keys(data, PREFIX_ONE_WIRE):
         if is_configured(data[key]):  # empty 1-Wire slots are reported as "x.x"
-            entities.append(CBWOneWireSensor(coordinator, key, f"1-Wire sensor {n}", fallback))
+            entities.append(CBWOneWireSensor(coordinator, key, n, fallback))
     for key, n in indexed_keys(data, PREFIX_ANALOG_INPUT):
         if is_configured(data[key]):
-            entities.append(CBWSensor(coordinator, key, f"Analog input {n}"))
+            entities.append(CBWSensor(coordinator, key, n, "analog_input"))
     if is_configured(data.get(KEY_FREQUENCY_INPUT)):
-        entities.append(CBWSensor(coordinator, KEY_FREQUENCY_INPUT, "Frequency input"))
+        entities.append(CBWSensor(coordinator, KEY_FREQUENCY_INPUT, None, "frequency_input"))
 
     vins = vin_keys(data)
     for key, n in vins:
-        name = "Supply voltage" if len(vins) == 1 else f"Supply voltage {n}"
-        entities.append(CBWVinSensor(coordinator, key, name))
+        if len(vins) == 1:
+            entities.append(CBWVinSensor(coordinator, key, None, "supply_voltage"))
+        else:
+            entities.append(CBWVinSensor(coordinator, key, n, "supply_voltage_n"))
 
-    # Input functions (only present when assigned a Local Number on the device)
+    # Input functions (only present when assigned a Local I/O number on the device)
     for key, n in indexed_keys(data, PREFIX_FREQUENCY):
-        entities.append(CBWFrequencySensor(coordinator, key, f"Input {n} frequency"))
+        entities.append(CBWFrequencySensor(coordinator, key, n, "input_frequency"))
     for key, n in indexed_keys(data, PREFIX_COUNT):
-        entities.append(CBWCounterSensor(coordinator, key, f"Input {n} count"))
+        entities.append(CBWCounterSensor(coordinator, key, n, "input_count"))
     for key, n in indexed_keys(data, PREFIX_ON_TIME):
-        entities.append(CBWDurationSensor(coordinator, key, f"Input {n} on time", False))
+        entities.append(CBWDurationSensor(coordinator, key, n, "input_on_time", False))
     for key, n in indexed_keys(data, PREFIX_TOTAL_ON_TIME):
-        entities.append(CBWDurationSensor(coordinator, key, f"Input {n} total on time", True))
+        entities.append(CBWDurationSensor(coordinator, key, n, "input_total_on_time", True))
 
-    async_add_entities(entities)
+    # Registers are read-only here unless "Allow writing registers" is on
+    # (then number.py provides them instead). On an X-404 they may hold Modbus readings.
+    if not entry.options.get(CONF_WRITABLE_REGISTERS):
+        for key, n in indexed_keys(data, PREFIX_REGISTER):
+            if is_configured(data[key]):
+                entities.append(CBWSensor(coordinator, key, n, "register"))
+    return entities
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: CBWConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    async_setup_dynamic(entry, async_add_entities, _build)
 
 
 class CBWSensor(CBWEntity, SensorEntity):
     """Numeric value. A unit printed by the device (showUnits) is used when present."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _requires_value = True
+
+    def __init__(self, coordinator, key: str, number: int | None, translation_key: str) -> None:
+        super().__init__(coordinator, key, number)
+        self._attr_translation_key = translation_key
 
     @property
     def native_value(self) -> float | None:
@@ -89,8 +107,8 @@ class CBWSensor(CBWEntity, SensorEntity):
 class CBWOneWireSensor(CBWSensor):
     """Temperature/humidity probe. Unit comes from the device, else from the option."""
 
-    def __init__(self, coordinator, key, name, fallback_unit: str | None) -> None:
-        super().__init__(coordinator, key, name)
+    def __init__(self, coordinator, key: str, number: int, fallback_unit: str | None) -> None:
+        super().__init__(coordinator, key, number, "one_wire_sensor")
         self._attr_native_unit_of_measurement = fallback_unit
 
     @property
@@ -122,9 +140,8 @@ class CBWDurationSensor(CBWSensor):
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
 
-    def __init__(self, coordinator, key, name, total: bool) -> None:
-        super().__init__(coordinator, key, name)
+    def __init__(self, coordinator, key: str, number: int, translation_key: str, total: bool) -> None:
+        super().__init__(coordinator, key, number, translation_key)
         self._attr_state_class = (
             SensorStateClass.TOTAL_INCREASING if total else SensorStateClass.MEASUREMENT
         )
-

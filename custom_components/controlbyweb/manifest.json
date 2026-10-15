@@ -3,9 +3,11 @@
   "name": "ControlByWeb",
   "codeowners": [],
   "config_flow": true,
+  "dhcp": [{ "macaddress": "000CC8*" }],
   "documentation": "https://github.com/your-user/ha-controlbyweb",
-  "issue_tracker": "https://github.com/your-user/ha-controlbyweb/issues",
+  "integration_type": "device",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/your-user/ha-controlbyweb/issues",
   "requirements": [],
-  "version": "0.4.1"
+  "version": "0.5.0"
 }

@@ -1,19 +1,22 @@
 {
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Connect to a ControlByWeb 400 series module",
-        "description": "For 400 series modules (X-400, X-401, X-404, X-405/406, X-408, X-410, X-412, X-417, X-418, X-420). Use the Administrator login, or the User login if you enabled a Control Page password; leave the password blank if none is set.",
+        "description": "For 400 series modules (X-400, X-401, X-404, X-405/406, X-408, X-410, X-412, X-417, X-418, X-420). Use the Administrator login, or the User login if you enabled a Control Page password; leave the password blank if none is set.\n\nOver plain HTTP the password is sent unencrypted (HTTP Basic), which is fine on a trusted network. HTTPS devices use self-signed certificates, so certificate checking is off unless you tick \"Verify HTTPS certificate\".",
         "data": {
           "host": "IP address or hostname",
           "port": "Port",
           "username": "Username",
           "password": "Password",
-          "ssl": "Use HTTPS (self-signed certificates are accepted)"
+          "ssl": "Use HTTPS",
+          "verify_ssl": "Verify HTTPS certificate"
         }
       },
-      "reauth_confirm": {
-        "title": "Re-enter credentials",
+      "discovery_confirm": {
+        "title": "ControlByWeb module found",
+        "description": "A ControlByWeb module was found at {host}. Enter its login to add it.",
         "data": {
           "username": "Username",
           "password": "Password"
@@ -25,10 +28,17 @@
         "data": {
           "model": "Model"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-enter credentials",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Could not reach the device or read /state.json",
+      "cannot_connect": "Could not reach the device",
       "invalid_auth": "Invalid username or password",
       "unsupported_device": "The device answered, but not like a 400 series module (no state.json). Other ControlByWeb families, such as older WebRelays, are not supported."
     },
@@ -43,7 +53,95 @@
         "data": {
           "model": "Model (shown on the device)",
           "scan_interval": "Polling interval (seconds, minimum 3)",
-          "onewire_unit": "Fallback unit for 1-Wire sensors (only used if the device doesn't report one)"
+          "onewire_unit": "Fallback unit for 1-Wire sensors",
+          "use_device_names": "Use I/O names from the device (experimental)",
+          "writable_registers": "Allow writing registers"
+        },
+        "data_description": {
+          "onewire_unit": "Only used if the device doesn't report a unit itself.",
+          "use_device_names": "Names the entities after the names set on the module (read from customState.json). Matching is by position and is only applied when both files agree; see the diagnostics download if it doesn't take effect.",
+          "writable_registers": "Registers are read-only sensors by default. Turn this on to get editable number boxes. On an X-404, registers can hold Modbus device data, so only enable this if you want to write them."
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "relay": {
+        "name": "Relay {number}"
+      }
+    },
+    "button": {
+      "relay_pulse": {
+        "name": "Relay {number} pulse"
+      },
+      "reset_count": {
+        "name": "Input {number} count reset"
+      },
+      "reset_on_time": {
+        "name": "Input {number} on time reset"
+      },
+      "reset_total_on_time": {
+        "name": "Input {number} total on time reset"
+      }
+    },
+    "binary_sensor": {
+      "digital_input": {
+        "name": "Digital input {number}"
+      },
+      "digital_io": {
+        "name": "Digital I/O {number}"
+      }
+    },
+    "sensor": {
+      "one_wire_sensor": {
+        "name": "1-Wire sensor {number}"
+      },
+      "analog_input": {
+        "name": "Analog input {number}"
+      },
+      "frequency_input": {
+        "name": "Frequency input"
+      },
+      "supply_voltage": {
+        "name": "Supply voltage"
+      },
+      "supply_voltage_n": {
+        "name": "Supply voltage {number}"
+      },
+      "input_frequency": {
+        "name": "Input {number} frequency"
+      },
+      "input_count": {
+        "name": "Input {number} count"
+      },
+      "input_on_time": {
+        "name": "Input {number} on time"
+      },
+      "input_total_on_time": {
+        "name": "Input {number} total on time"
+      },
+      "register": {
+        "name": "Register {number}"
+      }
+    },
+    "number": {
+      "register": {
+        "name": "Register {number}"
+      },
+      "analog_output": {
+        "name": "Analog output {number}"
+      }
+    }
+  },
+  "services": {
+    "pulse": {
+      "name": "Pulse relay",
+      "description": "Turns a relay on for a set time, then off. The duration applies to this one pulse only; the pulse time saved on the device is not changed.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "Pulse length in seconds (0.1 to 86400)."
         }
       }
     }

@@ -72,16 +72,23 @@ class CBWClient:
         except (aiohttp.ClientError, TimeoutError) as err:
             raise CBWConnectionError(str(err) or type(err).__name__) from err
 
-    async def get_state(self) -> dict[str, Any]:
+    async def _get_json(self, path: str) -> dict[str, Any]:
         # showUnits=1 makes 1-Wire sensors report e.g. "77.3 F" instead of "77.3"
-        text = await self._get("/state.json", {"showUnits": 1} if self.show_units else None)
+        text = await self._get(path, {"showUnits": 1} if self.show_units else None)
         try:
             data = json.loads(text)
         except ValueError as err:
-            raise CBWResponseError(f"state.json is not valid JSON: {err}") from err
+            raise CBWResponseError(f"{path} is not valid JSON: {err}") from err
         if not isinstance(data, dict):
-            raise CBWResponseError("Unexpected state.json format")
+            raise CBWResponseError(f"Unexpected {path} format")
         return data
+
+    async def get_state(self) -> dict[str, Any]:
+        return await self._get_json("/state.json")
+
+    async def get_custom_state(self) -> dict[str, Any]:
+        """Same I/O as state.json, keyed by the camelCase names set on the device."""
+        return await self._get_json("/customState.json")
 
     async def send_command(self, params: Mapping[str, Any]) -> None:
         await self._get("/state.json", params)

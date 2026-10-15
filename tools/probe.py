@@ -4,6 +4,7 @@
   python probe.py 192.168.1.2 --user admin --password webrelay
   python probe.py 192.168.1.2 --password webrelay --path customState.json
   python probe.py 192.168.1.2 --password webrelay --set showUnits=1   # read-only
+  python probe.py 192.168.1.2 --password webrelay --names            # how custom names line up
   python probe.py 192.168.1.2 --password webrelay --set relay1=1      # REAL command!
 
 With no --path it tries state.json (400 series), then state.xml (older WebRelay),
@@ -18,6 +19,7 @@ p.add_argument("--https", action="store_true")
 p.add_argument("--user", default="admin")
 p.add_argument("--password", default="")
 p.add_argument("--path", help="file to read, e.g. customState.json (default: try several)")
+p.add_argument("--names", action="store_true", help="compare state.json with customState.json")
 p.add_argument("--set", help="e.g. relay1=1 (sends a real command!)")
 a = p.parse_args()
 
@@ -57,8 +59,40 @@ def show(path, with_auth=True):
     return False
 
 
+NON_IO = {"lat", "long", "utcTime", "timezoneOffset", "serialNumber", "minRecRefresh", "deviceUptime"}
+
+
+def names_report():
+    """Show how the two files line up (the integration matches them by position)."""
+    docs = {}
+    for path in ("state.json", "customState.json"):
+        status, body = fetch(path)
+        if status != 200:
+            print(f"[FAIL] {path}: {body.strip()[:120]}")
+            return
+        try:
+            docs[path] = json.loads(body)
+        except ValueError:
+            print(f"[FAIL] {path} is not JSON")
+            return
+    s = [(k, v) for k, v in docs["state.json"].items() if k not in NON_IO]
+    c = [(k, v) for k, v in docs["customState.json"].items() if k not in NON_IO]
+    print(f"state.json: {len(s)} I/O entries, customState.json: {len(c)} I/O entries")
+    if len(s) != len(c):
+        print("COUNTS DIFFER -> the integration would NOT use device names for this unit.")
+    print(f"\n{'#':>2}  {'state.json key':<18}{'value':<10}  {'customState key':<22}{'value':<10}")
+    for i in range(max(len(s), len(c))):
+        sk, sv = s[i] if i < len(s) else ("-", "")
+        ck, cv = c[i] if i < len(c) else ("-", "")
+        flag = "" if str(sv) == str(cv) else "   <- values differ"
+        print(f"{i + 1:>2}  {sk:<18}{str(sv):<10}  {ck:<22}{str(cv):<10}{flag}")
+    print("\nIf every row pairs the right I/O (same value, sensible name), device names will work.")
+
+
 try:
-    if a.path:
+    if a.names:
+        names_report()
+    elif a.path:
         show(a.path)
     else:
         found = show("state.json") or show("state.xml") or (a.password and show("state.xml", False))

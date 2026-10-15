@@ -1,4 +1,4 @@
-"""Config flow."""
+"""Config flow: manual setup, DHCP discovery, reauth and options."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -9,7 +9,13 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .api import CBWAuthError, CBWConnectionError, CBWError, create_client, detect_client
 from .const import (
@@ -18,6 +24,9 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_SHOW_UNITS,
     CONF_SSL,
+    CONF_USE_DEVICE_NAMES,
+    CONF_VERIFY_SSL,
+    CONF_WRITABLE_REGISTERS,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_USERNAME,
@@ -29,6 +38,9 @@ from .const import (
     describe_state,
     guess_model,
 )
+from .helpers import get_session
+
+PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -43,37 +55,41 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry) -> OptionsFlow:
         return CBWOptionsFlow()
 
+    async def _async_connect(self, user_input: Mapping[str, Any]) -> str | None:
+        """Try to connect. Returns an error key, or None (state kept for the next step)."""
+        data = {**self._data, **user_input}
+        try:
+            client, state = await detect_client(get_session(self.hass, data), data)
+        except CBWAuthError:
+            return "invalid_auth"
+        except CBWConnectionError:
+            return "cannot_connect"
+        except CBWError:
+            return "unsupported_device"
+        # 400 series report a serial number (their MAC); fall back to host:port
+        uid = str(state.get(KEY_SERIAL) or f"{data[CONF_HOST]}:{data[CONF_PORT]}")
+        await self.async_set_unique_id(uid)
+        self._data = {**data, CONF_SHOW_UNITS: client.show_units}
+        self._abort_if_unique_id_configured(updates=self._data)
+        self._state = state
+        return None
+
+    # ------------------------------------------------------------------ manual
     async def async_step_user(self, user_input=None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            ssl = user_input.get(CONF_SSL, False)
-            session = async_get_clientsession(self.hass, verify_ssl=not ssl)
-            try:
-                client, state = await detect_client(session, user_input)
-            except CBWAuthError:
-                errors["base"] = "invalid_auth"
-            except CBWConnectionError:
-                errors["base"] = "cannot_connect"
-            except CBWError:
-                errors["base"] = "unsupported_device"
-            else:
-                uid = str(
-                    state.get(KEY_SERIAL)
-                    or f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
-                )
-                await self.async_set_unique_id(uid)
-                self._data = {**user_input, CONF_SHOW_UNITS: client.show_units}
-                self._abort_if_unique_id_configured(updates=self._data)
-                self._state = state
+            if (error := await self._async_connect(user_input)) is None:
                 return await self.async_step_model()
+            errors["base"] = error
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_HOST): str,
                 vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
                 vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): str,
-                vol.Optional(CONF_PASSWORD, default=""): str,
+                vol.Optional(CONF_PASSWORD, default=""): PASSWORD_SELECTOR,
                 vol.Required(CONF_SSL, default=False): bool,
+                vol.Required(CONF_VERIFY_SSL, default=False): bool,
             }
         )
         return self.async_show_form(
@@ -82,6 +98,36 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    # --------------------------------------------------------------- discovery
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
+        """A ControlByWeb MAC (00:0C:C8:...) appeared. If already set up, just follow
+        its new IP address; otherwise offer to add it."""
+        mac = format_mac(discovery_info.macaddress).upper()  # same form as serialNumber
+        await self.async_set_unique_id(mac)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_info.ip})
+        self._data = {CONF_HOST: discovery_info.ip, CONF_PORT: DEFAULT_PORT}
+        self.context["title_placeholders"] = {"name": f"ControlByWeb {discovery_info.ip}"}
+        return await self.async_step_discovery_confirm()
+
+    async def async_step_discovery_confirm(self, user_input=None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (error := await self._async_connect(user_input)) is None:
+                return await self.async_step_model()
+            errors["base"] = error
+        return self.async_show_form(
+            step_id="discovery_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): str,
+                    vol.Optional(CONF_PASSWORD, default=""): PASSWORD_SELECTOR,
+                }
+            ),
+            description_placeholders={"host": self._data[CONF_HOST]},
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------- model
     async def async_step_model(self, user_input=None) -> ConfigFlowResult:
         """Confirm the model; it is shown on the device in Home Assistant."""
         if user_input is not None:
@@ -98,6 +144,7 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={"summary": describe_state(self._state)},
         )
 
+    # ------------------------------------------------------------------ reauth
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         return await self.async_step_reauth_confirm()
 
@@ -106,8 +153,7 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reauth_entry()
         if user_input is not None:
             new_data = {**entry.data, **user_input}
-            ssl = new_data.get(CONF_SSL, False)
-            client = create_client(async_get_clientsession(self.hass, verify_ssl=not ssl), new_data)
+            client = create_client(get_session(self.hass, new_data), new_data)
             try:
                 await client.get_state()
             except CBWAuthError:
@@ -124,7 +170,7 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_USERNAME, default=entry.data.get(CONF_USERNAME, DEFAULT_USERNAME)
                     ): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
                 }
             ),
             errors=errors,
@@ -152,6 +198,14 @@ class CBWOptionsFlow(OptionsFlow):
                         CONF_ONEWIRE_UNIT,
                         default=opts.get(CONF_ONEWIRE_UNIT, UNIT_NONE),
                     ): vol.In([UNIT_NONE, "\u00b0F", "\u00b0C"]),
+                    vol.Required(
+                        CONF_USE_DEVICE_NAMES,
+                        default=opts.get(CONF_USE_DEVICE_NAMES, False),
+                    ): bool,
+                    vol.Required(
+                        CONF_WRITABLE_REGISTERS,
+                        default=opts.get(CONF_WRITABLE_REGISTERS, False),
+                    ): bool,
                 }
             ),
         )

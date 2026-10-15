@@ -1,4 +1,4 @@
-"""Constants for the ControlByWeb integration."""
+"""Constants and pure helpers for the ControlByWeb integration."""
 from __future__ import annotations
 
 import re
@@ -9,16 +9,24 @@ from homeassistant.const import Platform
 DOMAIN = "controlbyweb"
 
 CONF_SSL = "ssl"
+CONF_VERIFY_SSL = "verify_ssl"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_ONEWIRE_UNIT = "onewire_unit"
 CONF_SHOW_UNITS = "show_units"
 CONF_MODEL = "model"
+CONF_USE_DEVICE_NAMES = "use_device_names"
+CONF_WRITABLE_REGISTERS = "writable_registers"
 
 DEFAULT_PORT = 80
 DEFAULT_USERNAME = "admin"
 DEFAULT_SCAN_INTERVAL = 5  # seconds
 MIN_SCAN_INTERVAL = 3  # devices report minRecRefresh = 3
 UNIT_NONE = "none"
+
+SERVICE_PULSE = "pulse"
+ATTR_DURATION = "duration"
+MIN_PULSE = 0.1  # seconds, per the manual
+MAX_PULSE = 86400
 
 MODELS = [
     "X-400",
@@ -49,7 +57,7 @@ RELAY_OFF = 0
 RELAY_ON = 1
 RELAY_PULSE = 2  # uses the "Pulse Time" configured for the relay on the device
 
-# Key names (as used in state.json; the XML client normalises to these too)
+# Key names as used in state.json
 PREFIX_RELAY = "relay"
 PREFIX_DIGITAL_INPUT = "digitalInput"
 PREFIX_DIGITAL_IO = "digitalIO"  # X-420: direction is configured on the device
@@ -65,8 +73,16 @@ KEY_FREQUENCY_INPUT = "frequencyInput"  # X-420 dedicated frequency input
 KEY_VIN = "vin"  # some units report "vin", others "vin1"
 KEY_SERIAL = "serialNumber"
 
+# Keys that are device info rather than I/O (excluded when matching custom names)
+NON_IO_KEYS = frozenset(
+    {"lat", "long", "utcTime", "timezoneOffset", KEY_SERIAL, "minRecRefresh", "deviceUptime"}
+)
+
 MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 _NUMBER_RE = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(.*?)\s*$")
+_NAME_SPLIT_RE = re.compile(
+    r"(?<=[a-z])(?=[A-Z0-9])|(?<=[0-9])(?=[A-Za-z])|(?<=[A-Z])(?=[A-Z][a-z])"
+)
 
 # Units as printed by the device (showUnits=1) -> Home Assistant units
 UNIT_MAP = {"F": "\u00b0F", "C": "\u00b0C", "%RH": "%"}
@@ -95,8 +111,7 @@ def parse_value(value: Any) -> tuple[float | None, str | None]:
     match = _NUMBER_RE.match(str(value))
     if not match:
         return None, None  # includes 'x.x' (sensor not readable / not configured)
-    unit = match.group(2) or None
-    return float(match.group(1)), unit
+    return float(match.group(1)), (match.group(2) or None)
 
 
 def to_float(value: Any) -> float | None:
@@ -108,6 +123,47 @@ def is_configured(value: Any) -> bool:
     return value is not None and str(value).strip() not in ("", "x.x")
 
 
+# ---------------------------------------------------------------- device names
+def humanize_name(key: str) -> str:
+    """'gasTank' -> 'Gas Tank', 'myRegister1' -> 'My Register 1'.
+
+    customState.json only provides camelCase names, so spacing and capitalisation
+    are reconstructed and may not match what you typed on the device exactly.
+    """
+    if not key:
+        return key
+    return _NAME_SPLIT_RE.sub(" ", key[0].upper() + key[1:])
+
+
+def _values_match(a: Any, b: Any) -> bool:
+    if str(a) == str(b):
+        return True
+    na, nb = to_float(a), to_float(b)
+    if na is None or nb is None:
+        return False
+    return abs(na - nb) <= max(1.0, 0.05 * max(abs(na), abs(nb)))
+
+
+def build_name_map(state: dict[str, Any], custom: dict[str, Any]) -> dict[str, str]:
+    """Map state.json keys to the device's custom names, or {} if unsure.
+
+    The manual says customState.json holds the same I/O keyed by camelCase custom
+    names, but not how entries line up, so they are matched by position and the
+    result is only trusted if both files have the same number of I/O entries and
+    their values agree. Wrong labels on a relay are worse than generic ones.
+    """
+    state_keys = [k for k in state if k not in NON_IO_KEYS]
+    custom_keys = [k for k in custom if k not in NON_IO_KEYS]
+    if not state_keys or len(state_keys) != len(custom_keys):
+        return {}
+    pairs = list(zip(state_keys, custom_keys))
+    mismatches = sum(1 for sk, ck in pairs if not _values_match(state[sk], custom[ck]))
+    if mismatches > max(1, len(pairs) // 5):
+        return {}
+    return {sk: humanize_name(ck) for sk, ck in pairs if ck != sk}
+
+
+# -------------------------------------------------------- model guess / summary
 def _configured(data: dict[str, Any], prefix: str) -> list[str]:
     return [k for k, _ in indexed_keys(data, prefix) if is_configured(data[k])]
 
