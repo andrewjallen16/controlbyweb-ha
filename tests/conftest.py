@@ -12,8 +12,9 @@ pytest_plugins = ["pytest_homeassistant_custom_component"]
 
 HOST = "192.168.1.50"
 UID = "00:0C:C8:07:EC:AC"
-STATE_URL = re.compile(rf"http://{re.escape(HOST)}:80/state\.json.*")
-CUSTOM_URL = re.compile(rf"http://{re.escape(HOST)}:80/customState\.json.*")
+# yarl drops the default port, so the real request URL is http://HOST/state.json?... (no ":80")
+STATE_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/state\.json.*")
+CUSTOM_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/customState\.json.*")
 
 STATE = {
     "vin1": "25.0",

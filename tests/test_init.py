@@ -67,8 +67,10 @@ async def test_new_sensor_appears_without_reload(hass, aioclient_mock, entry):
 
 
 async def test_device_names_are_opt_in(hass, aioclient_mock, entry):
-    custom = {"garageDoor": "0", "relay2": "0", "frontGate": "1", "digitalInput2": "0",
-              "vin1": "25.0", "register1": "0", "register2": "x.x",
+    # Same I/O in the same order as STATE (names are matched by position):
+    # vin1, register1, register2, relay1, relay2, digitalInput1, digitalInput2, oneWire1, oneWire2
+    custom = {"vin1": "25.0", "register1": "0", "register2": "x.x",
+              "garageDoor": "0", "relay2": "0", "frontGate": "1", "digitalInput2": "0",
               "oneWireSensor1": "91.29 F", "oneWireSensor2": "x.x"}
     aioclient_mock.get(CUSTOM_URL, json=custom)
     aioclient_mock.get(STATE_URL, json=dict(STATE))

@@ -6,6 +6,7 @@ Reads /state.json and sends commands such as ``state.json?relay1=1``
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Mapping
 from typing import Any
@@ -47,7 +48,12 @@ class CBWClient:
         scheme = "https" if ssl else "http"
         self._base = f"{scheme}://{host}:{port}"
         self._session = session
-        self._auth = aiohttp.BasicAuth(username or "none", password) if password else None
+        # HTTP Basic auth, built by hand (aiohttp.BasicAuth is deprecated). Devices accept any
+        # user name when only the Control Page password is set, so default to "none".
+        self._headers: dict[str, str] | None = None
+        if password:
+            token = base64.b64encode(f"{username or 'none'}:{password}".encode()).decode("ascii")
+            self._headers = {"Authorization": f"Basic {token}"}
         self.show_units = show_units
 
     async def _get(self, path: str, params: Mapping[str, Any] | None = None) -> str:
@@ -55,7 +61,7 @@ class CBWClient:
         try:
             async with asyncio.timeout(10):
                 async with self._session.get(
-                    f"{self._base}{path}", params=query, auth=self._auth
+                    f"{self._base}{path}", params=query, headers=self._headers
                 ) as resp:
                     if resp.status in (401, 403):
                         raise CBWAuthError("Authentication failed")
