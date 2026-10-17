@@ -3,8 +3,6 @@
 Local-polling integration for ControlByWeb 400 series I/O modules (`state.json`). No cloud, no extra Python packages.
 Needs Home Assistant 2025.1 or newer (2026.3+ to show the bundled logo).
 
-> Before publishing, replace `your-user` in `manifest.json` (documentation and issue tracker URLs) and add yourself to `codeowners`.
-
 ## Supported modules
 | Model | What it is | Entities you can expect |
 |---|---|---|
