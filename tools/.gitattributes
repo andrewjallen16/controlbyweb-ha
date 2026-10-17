@@ -1,4 +1,0 @@
-# Keep LF line endings in the repo and on checkout (all platforms)
-* text=auto eol=lf
-*.zip binary
-*.bat text eol=crlf
