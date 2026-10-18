@@ -4,6 +4,10 @@ Versions follow `custom_components/controlbyweb/manifest.json`. Download files a
 `ha-controlbyweb-v<version>.zip` (everything) and `ha-controlbyweb-v<version>-patch.zip`
 (only the files changed since the previous patch, so your README and manifest are not overwritten).
 
+## 0.9.2
+- Each timer now has a "Timer N set" number box: type the seconds to start the timer (it shows the time
+  left while it runs; 0 stops it). The `controlbyweb.start_timer` service and the cancel button remain.
+
 ## 0.9.1
 - Modules powered over Ethernet (PoE) read 0 V on the Vin terminals, so "Supply voltage 0 V" is no longer
   created for them; an existing one is removed once. It comes back by itself if a DC supply is connected.

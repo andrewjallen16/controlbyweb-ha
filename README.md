@@ -47,7 +47,7 @@ Add the integration once per module. If DHCP gives a module a new IP address, di
 | `vin` / `vin1` | Sensor (volts) |
 | `registerN` | Sensor (read-only by default), or Number if writing is enabled |
 | `analogOutputN` | Number (writable) |
-| `timerN` | Sensor (seconds remaining) + "Timer N cancel" button; start it with the `controlbyweb.start_timer` service |
+| `timerN` | Sensor (seconds remaining), a "Timer N set" number box (type seconds to start it, 0 stops it), a "Timer N cancel" button, and the `controlbyweb.start_timer` service |
 | `vin` / `vin1` on PoE-capable modules | Diagnostic "Power source" sensor (PoE or DC input) |
 | `deviceUptime` | Diagnostic "Uptime" sensor (newer firmware; changes once a minute) |
 
@@ -98,13 +98,14 @@ Device page -> three-dot menu -> **Download diagnostics**. Passwords, usernames,
 - Defaults: admin login `admin` / `webrelay`; the Control Page needs no password unless you enable one (which also disables Modbus/TCP, not used here). Change default passwords.
 
 ## Notes and limits
+- **Uptime:** the Uptime sensor only exists for modules that report `deviceUptime`, which newer firmware does (for example 3.13.8.0). Older firmware, such as 2.81, doesn't report it anywhere (neither in state.json nor diagnostics.xml), so no sensor is created; updating the module's firmware is the only way to get one.
 - **PoE:** "-E" models (for example X-420-E) can be powered over Ethernet; "-I" models are DC only. A PoE-powered module reads 0 V on its Vin terminals (the manual says so), which isn't a measurement, so no "Supply voltage" entity is created for it. Instead a diagnostic **Power source** sensor reports PoE or DC input: PoE when Vin reads about 0 V, or (on "-E" models) is at or below 12 V, which is where the module prefers PoE; DC input above that. Between 1 and 12 V on an "-E" module, PoE and a backup supply can't be told apart. Connect a DC supply later and the supply-voltage sensor appears by itself.
 - **Model and firmware:** on firmware that provides `/diagnostics.xml` (no password needed) the device card shows the module's own model number (e.g. "X-404-I") and firmware version, and the setup screen pre-selects the model it reports. On older firmware the model you choose is shown and no firmware version is available. Both are read when the integration loads, so reload it after a firmware update.
 - **X-404 registers:** Modbus readings appear as `registerN`. That's why registers are read-only by default; enabling writes on an X-404 can write to the Modbus device behind a register.
 - **X-417 analog outputs:** the manuals don't give the `state.json` key; `analogOutputN` is assumed and unverified. Values are in the engineering units set on the device and the Number entity does not limit the range, so check your output scaling before writing to a valve or actuator.
 - **X-420 frequency input / wind speed:** the module scales this input with the Slope and Offset you set (e.g. an R.M. Young 5103 wind monitor shown in mph, km/h, m/s or knots), but `state.json` doesn't say which unit you chose. If the device reports one with the value (`showUnits`), it is used; otherwise set **Frequency input unit** under Configure to match the unit you configured on the module. Speed units get the wind-speed device class.
 - **X-420 frequency input units:** with the module's Units field blank and Slope 1 / Offset 0, the value is the raw frequency in Hz; choose **Hz** as the Frequency input unit in that case.
-- **Timers:** `timerN` is the state.json key (confirmed on an X-420). Each timer is a sensor showing seconds remaining, plus a "Timer N cancel" button. Start one with the `controlbyweb.start_timer` service. Starting (`timer1=30`) was confirmed on an X-420; stopping (`timer1=0`) is assumed to work the same way. Check what a timer triggers on the module (Control/Logic -> Tasks) before starting it from Home Assistant, because a task that fires when it expires will run.
+- **Timers:** `timerN` is the state.json key (confirmed on an X-420). Each timer is a sensor showing seconds remaining, a "Timer N set" box where you type the seconds to start it (0 stops it), and a "Timer N cancel" button. Automations can use the `controlbyweb.start_timer` service. Starting (`timer1=30`) was confirmed on an X-420; stopping (`timer1=0`) is assumed to work the same way. Check what a timer triggers on the module (Control/Logic -> Tasks) before starting it from Home Assistant, because a task that fires when it expires will run.
 - **Unrecognised keys:** anything in `state.json` that the integration doesn't use is listed once in the Home Assistant log (Info level) and under `unhandled_keys` in the diagnostics download. If an I/O you expected is missing, that list shows what the module is actually calling it.
 - **X-420 digital I/O** is shown read-only (direction is set on the device; the manuals don't document writing it over HTTP).
 

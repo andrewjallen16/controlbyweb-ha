@@ -152,6 +152,9 @@
       },
       "analog_output": {
         "name": "Analog output {number}"
+      },
+      "timer_set": {
+        "name": "Timer {number} set"
       }
     }
   },

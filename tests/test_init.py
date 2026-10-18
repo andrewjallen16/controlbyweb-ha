@@ -208,3 +208,21 @@ async def test_poe_module_without_vin_in_state_uses_diagnostics_xml(hass, aiocli
     await _setup(hass, entry)
     assert not _eid(hass, "sensor", "vin1")
     assert hass.states.get(_eid(hass, "sensor", "powerSource")).state == "poe"
+
+
+async def test_timer_number_box_starts_the_timer(hass, aioclient_mock, entry):
+    aioclient_mock.get(STATE_URL, json={**STATE, "timer1": "0"})
+    mock_diagnostics(aioclient_mock)
+    await _setup(hass, entry)
+    box = _eid(hass, "number", "timer1")
+    assert box
+
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": box, "value": 45}, blocking=True
+    )
+    assert any("timer1=45" in str(call[1]) for call in aioclient_mock.mock_calls)
+
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": box, "value": 0}, blocking=True
+    )
+    assert any("timer1=0" in str(call[1]) for call in aioclient_mock.mock_calls)
