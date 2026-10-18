@@ -8,10 +8,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
 
 import aiohttp
+
+
+_XML_TAG_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>([^<]*)</\1>")
 
 
 class CBWError(Exception):
@@ -91,6 +95,14 @@ class CBWClient:
 
     async def get_state(self) -> dict[str, Any]:
         return await self._get_json("/state.json")
+
+    async def get_diagnostics(self) -> dict[str, str]:
+        """diagnostics.xml: modelNumber, firmwareRevision, serialNumber, vin, deviceUptime...
+        (needs no password). Newer firmware only; raises CBWError if the module lacks it."""
+        text = await self._get("/diagnostics.xml")
+        if "<datavalues" not in text:  # e.g. an HTML page served for an unknown file
+            return {}
+        return {k: v.strip() for k, v in _XML_TAG_RE.findall(text) if k != "datavalues"}
 
     async def get_custom_state(self) -> dict[str, Any]:
         """Same I/O as state.json, keyed by the camelCase names set on the device."""

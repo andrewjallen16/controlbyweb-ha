@@ -39,6 +39,7 @@ from .const import (
     UNIT_NONE,
     describe_state,
     guess_model,
+    model_from_number,
 )
 from .helpers import get_session
 
@@ -52,6 +53,7 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
         self._state: dict[str, Any] = {}
+        self._diag: dict[str, str] = {}  # diagnostics.xml (model number, firmware)
 
     @staticmethod
     @callback
@@ -75,6 +77,10 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
         self._data = {**data, CONF_SHOW_UNITS: client.show_units}
         self._abort_if_unique_id_configured(updates=self._data)
         self._state = state
+        try:  # optional: the module's own model number (newer firmware)
+            self._diag = await client.get_diagnostics()
+        except CBWError:
+            self._diag = {}
         return None
 
     # ------------------------------------------------------------------ manual
@@ -139,12 +145,15 @@ class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
                 title=f"ControlByWeb {model} ({self._data[CONF_HOST]})",
                 data={**self._data, CONF_MODEL: model},
             )
+        reported = self._diag.get("modelNumber")
+        default = model_from_number(reported) or guess_model(self._state)
+        summary = describe_state(self._state)
+        if reported:
+            summary += f"; the module reports its model as {reported}"
         return self.async_show_form(
             step_id="model",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_MODEL, default=guess_model(self._state)): vol.In(MODELS)}
-            ),
-            description_placeholders={"summary": describe_state(self._state)},
+            data_schema=vol.Schema({vol.Required(CONF_MODEL, default=default): vol.In(MODELS)}),
+            description_placeholders={"summary": summary},
         )
 
     # ------------------------------------------------------------------ reauth

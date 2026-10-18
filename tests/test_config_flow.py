@@ -85,3 +85,12 @@ async def test_dhcp_new_device_asks_for_login(hass):
         data=DhcpServiceInfo(ip="192.168.1.80", hostname="cbw", macaddress="000cc8064a06"),
     )
     assert result["step_id"] == "discovery_confirm"
+
+
+async def test_model_step_preselects_the_model_the_module_reports(hass, device):
+    with patch("custom_components.controlbyweb.async_setup_entry", return_value=True):
+        result = await _start(hass)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    assert result["step_id"] == "model"
+    assert "X-404-I" in result["description_placeholders"]["summary"]
+    assert result["data_schema"]({})["model"] == "X-404"  # not the X-401 the I/O alone suggests

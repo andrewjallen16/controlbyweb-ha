@@ -1,17 +1,17 @@
 {
   "domain": "controlbyweb",
   "name": "ControlByWeb",
-  "codeowners": ["@andrewjallen16"],
+  "codeowners": [],
   "config_flow": true,
   "dhcp": [
     {
       "macaddress": "000CC8*"
     }
   ],
-  "documentation": "https://github.com/andrewjallen16/controlbyweb-ha",
+  "documentation": "https://github.com/your-user/ha-controlbyweb",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/andrewjallen16/controlbyweb-ha/issues",
+  "issue_tracker": "https://github.com/your-user/ha-controlbyweb/issues",
   "requirements": [],
-  "version": "0.7.2"
+  "version": "0.9.0"
 }

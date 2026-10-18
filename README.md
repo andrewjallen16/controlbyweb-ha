@@ -3,6 +3,8 @@
 Local-polling integration for ControlByWeb 400 series I/O modules (`state.json`). No cloud, no extra Python packages.
 Needs Home Assistant 2025.1 or newer (2026.3+ to show the bundled logo).
 
+> Before publishing, replace `your-user` in `manifest.json` (documentation and issue tracker URLs) and add yourself to `codeowners`.
+
 ## Supported modules
 | Model | What it is | Entities you can expect |
 |---|---|---|
@@ -45,7 +47,8 @@ Add the integration once per module. If DHCP gives a module a new IP address, di
 | `vin` / `vin1` | Sensor (volts) |
 | `registerN` | Sensor (read-only by default), or Number if writing is enabled |
 | `analogOutputN` | Number (writable) |
-| `timerN` | Sensor (seconds remaining, read-only; only if the module lists timers in `state.json`) |
+| `timerN` | Sensor (seconds remaining) + "Timer N cancel" button; start it with the `controlbyweb.start_timer` service |
+| `deviceUptime` | Diagnostic "Uptime" sensor (newer firmware; changes once a minute) |
 
 - Sensors the device reports as `x.x` (unplugged probe, unused register) are shown as **unavailable**, or skipped if they were never configured. If one is connected or configured later it **appears without reloading** the integration.
 - **Unplugged / once-seen I/O:** an I/O that has been seen keeps its entity and shows as unavailable while it reads `x.x` (for example a 1-Wire probe that is unplugged), and it comes back by itself, including after a restart. Slots that were never in use get no entity.
@@ -78,6 +81,14 @@ If every row pairs the right I/O, turn the option on. Names are read when the in
     data:
       duration: 2.5
 
+**`controlbyweb.start_timer`** - start a module timer on a Timer sensor, counting down from a number of seconds (0 stops it; the module's timers are 24-bit, so up to 16,777,215).
+
+    action: controlbyweb.start_timer
+    target:
+      entity_id: sensor.my_timer_1
+    data:
+      duration: 30
+
 ## Diagnostics
 Device page -> three-dot menu -> **Download diagnostics**. Passwords, usernames, host, serial number and location are redacted. It includes the raw `state.json`, `customState.json`, and the integration's model guess.
 
@@ -86,11 +97,12 @@ Device page -> three-dot menu -> **Download diagnostics**. Passwords, usernames,
 - Defaults: admin login `admin` / `webrelay`; the Control Page needs no password unless you enable one (which also disables Modbus/TCP, not used here). Change default passwords.
 
 ## Notes and limits
+- **Model and firmware:** on firmware that provides `/diagnostics.xml` (no password needed) the device card shows the module's own model number (e.g. "X-404-I") and firmware version, and the setup screen pre-selects the model it reports. On older firmware the model you choose is shown and no firmware version is available. Both are read when the integration loads, so reload it after a firmware update.
 - **X-404 registers:** Modbus readings appear as `registerN`. That's why registers are read-only by default; enabling writes on an X-404 can write to the Modbus device behind a register.
 - **X-417 analog outputs:** the manuals don't give the `state.json` key; `analogOutputN` is assumed and unverified. Values are in the engineering units set on the device and the Number entity does not limit the range, so check your output scaling before writing to a valve or actuator.
 - **X-420 frequency input / wind speed:** the module scales this input with the Slope and Offset you set (e.g. an R.M. Young 5103 wind monitor shown in mph, km/h, m/s or knots), but `state.json` doesn't say which unit you chose. If the device reports one with the value (`showUnits`), it is used; otherwise set **Frequency input unit** under Configure to match the unit you configured on the module. Speed units get the wind-speed device class.
 - **X-420 frequency input units:** with the module's Units field blank and Slope 1 / Offset 0, the value is the raw frequency in Hz; choose **Hz** as the Frequency input unit in that case.
-- **Timers:** the manuals say timers (up to 16, 1-second down counters) exist but don't document their `state.json` tag, so `timerN` is assumed. They are shown read-only; there is no start/clear control because the HTTP syntax for that isn't documented. To check your module: create a timer, assign it a Local Timer Number, then run `python3 tools/probe.py <ip> --password <pw>` and look for `timer1`.
+- **Timers:** `timerN` is the state.json key (confirmed on an X-420). Each timer is a sensor showing seconds remaining, plus a "Timer N cancel" button. Start one with the `controlbyweb.start_timer` service. Starting (`timer1=30`) was confirmed on an X-420; stopping (`timer1=0`) is assumed to work the same way. Check what a timer triggers on the module (Control/Logic -> Tasks) before starting it from Home Assistant, because a task that fires when it expires will run.
 - **Unrecognised keys:** anything in `state.json` that the integration doesn't use is listed once in the Home Assistant log (Info level) and under `unhandled_keys` in the diagnostics download. If an I/O you expected is missing, that list shows what the module is actually calling it.
 - **X-420 digital I/O** is shown read-only (direction is set on the device; the manuals don't document writing it over HTTP).
 

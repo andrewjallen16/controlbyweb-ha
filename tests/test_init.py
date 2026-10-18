@@ -1,6 +1,9 @@
 """Setup, entities, services and diagnostics (need pytest-homeassistant-custom-component)."""
 from datetime import timedelta
 
+import pytest
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
@@ -8,7 +11,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.controlbyweb.const import DOMAIN
 from custom_components.controlbyweb.diagnostics import async_get_config_entry_diagnostics
 
-from .conftest import CUSTOM_URL, HOST, STATE, STATE_URL, UID
+from .conftest import CUSTOM_URL, DIAG_URL, HOST, STATE, STATE_URL, UID, mock_diagnostics
 
 
 def _eid(hass, domain, key):
@@ -66,6 +69,7 @@ async def test_pulse_service_puts_pulse_time_before_relay(hass, device, entry):
 
 async def test_new_sensor_appears_without_reload(hass, aioclient_mock, entry):
     aioclient_mock.get(STATE_URL, json=dict(STATE))
+    mock_diagnostics(aioclient_mock)
     await _setup(hass, entry)
     assert not _eid(hass, "sensor", "oneWireSensor2")
 
@@ -84,6 +88,7 @@ async def test_device_names_are_opt_in(hass, aioclient_mock, entry):
               "oneWireSensor1": "91.29 F", "oneWireSensor2": "x.x"}
     aioclient_mock.get(CUSTOM_URL, json=custom)
     aioclient_mock.get(STATE_URL, json=dict(STATE))
+    mock_diagnostics(aioclient_mock)
     entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(entry, options={"use_device_names": True})
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -99,3 +104,57 @@ async def test_diagnostics_redacts_secrets(hass, device, entry):
     blob = str(diag)
     for secret in ("secret", HOST, UID, "41.6796", "-111.8737"):
         assert secret not in blob
+
+
+async def test_timer_start_service_and_cancel_button(hass, aioclient_mock, entry):
+    aioclient_mock.get(STATE_URL, json={**STATE, "timer1": "0"})
+    mock_diagnostics(aioclient_mock)
+    await _setup(hass, entry)
+    timer, cancel = _eid(hass, "sensor", "timer1"), _eid(hass, "button", "timer1")
+    assert timer and cancel
+
+    await hass.services.async_call(
+        DOMAIN, "start_timer", {"entity_id": timer, "duration": 30}, blocking=True
+    )
+    assert any("timer1=30" in str(call[1]) for call in aioclient_mock.mock_calls)
+
+    await hass.services.async_call("button", "press", {"entity_id": cancel}, blocking=True)
+    assert any("timer1=0" in str(call[1]) for call in aioclient_mock.mock_calls)
+
+
+async def test_start_timer_on_a_non_timer_sensor_is_refused(hass, device, entry):
+    await _setup(hass, entry)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "start_timer",
+            {"entity_id": _eid(hass, "sensor", "vin1"), "duration": 30},
+            blocking=True,
+        )
+
+
+async def test_device_card_shows_model_and_firmware(hass, device, entry):
+    await _setup(hass, entry)
+    dev = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, UID)})
+    assert dev.model == "X-404-I"
+    assert dev.sw_version == "3.13.8.0"
+
+
+async def test_setup_works_without_diagnostics_xml(hass, aioclient_mock, entry):
+    aioclient_mock.get(STATE_URL, json=dict(STATE))
+    aioclient_mock.get(DIAG_URL, status=404)  # older firmware
+    await _setup(hass, entry)
+    dev = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, UID)})
+    assert dev.sw_version is None
+    assert dev.model == "X-404"  # falls back to the model chosen at setup
+
+
+async def test_uptime_sensor(hass, device, entry):
+    await _setup(hass, entry)
+    entity_id = _eid(hass, "sensor", "deviceUptime")
+    assert entity_id
+    state = hass.states.get(entity_id)
+    unit = state.attributes["unit_of_measurement"]  # seconds, or hours via the suggested unit
+    seconds = float(state.state) * {"s": 1, "min": 60, "h": 3600, "d": 86400}[unit]
+    assert abs(seconds - 166320) < 400  # 1 d 22:12:23, rounded down to the minute
+    assert state.attributes["device_class"] == "duration"

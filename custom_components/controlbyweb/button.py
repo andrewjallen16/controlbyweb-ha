@@ -11,6 +11,7 @@ from .const import (
     PREFIX_COUNT,
     PREFIX_ON_TIME,
     PREFIX_RELAY,
+    PREFIX_TIMER,
     PREFIX_TOTAL_ON_TIME,
     RELAY_PULSE,
     indexed_keys,
@@ -32,6 +33,9 @@ def _build(entry: CBWConfigEntry, coordinator) -> list[ButtonEntity]:
             CBWResetButton(coordinator, key, n, translation_key)
             for key, n in indexed_keys(data, prefix)
         ]
+    entities += [
+        CBWTimerCancelButton(coordinator, key, n) for key, n in indexed_keys(data, PREFIX_TIMER)
+    ]
     return entities
 
 
@@ -61,6 +65,19 @@ class CBWResetButton(CBWEntity, ButtonEntity):
     def __init__(self, coordinator, key: str, number: int, translation_key: str) -> None:
         super().__init__(coordinator, key, number, name_suffix="reset")
         self._attr_translation_key = translation_key
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_send(**{self._key: 0})
+
+
+class CBWTimerCancelButton(CBWEntity, ButtonEntity):
+    """Stops a running timer (sets it to 0). Starting one is the start_timer service,
+    because it needs a duration."""
+
+    _attr_translation_key = "cancel_timer"
+
+    def __init__(self, coordinator, key: str, number: int) -> None:
+        super().__init__(coordinator, key, number, name_suffix="cancel")
 
     async def async_press(self) -> None:
         await self.coordinator.async_send(**{self._key: 0})

@@ -27,6 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CBWConfigEntry) -> bool:
     coordinator = CBWCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
     await coordinator.async_load_names()
+    await coordinator.async_load_diagnostics()
     if extra := unhandled_keys(coordinator.data):
         _LOGGER.info(
             "state.json contains keys this integration does not use yet: %s. "

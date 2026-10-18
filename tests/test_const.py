@@ -11,6 +11,8 @@ from custom_components.controlbyweb.const import (
     normalize_unit,
     parse_value,
     UNIT_DEVICE_CLASS,
+    model_from_number,
+    parse_uptime,
     unhandled_keys,
     vin_keys,
 )
@@ -138,3 +140,21 @@ def test_power_meter_units():
     assert normalize_unit("hz") == "Hz" and normalize_unit("Hz") == "Hz"
     assert normalize_unit("psi") == "psi" and "psi" not in UNIT_DEVICE_CLASS  # unknown units pass through
     assert parse_value("-91.3 Deg") == (-91.3, "Deg")
+
+
+def test_model_from_number():
+    assert model_from_number("X-404-I") == "X-404"
+    assert model_from_number("X-420-E") == "X-420"
+    assert model_from_number("x-408-i") == "X-408"
+    assert model_from_number("X-400C-I") == "X-400C"
+    assert model_from_number("X-999-I") == "Other 400 series"  # a 400 series model not in the list
+    assert model_from_number("WebRelay") is None and model_from_number(None) is None
+
+
+def test_parse_uptime():
+    assert parse_uptime("1 days 22:12:23") == 166343
+    assert parse_uptime("53 days 16:18:25") == 53 * 86400 + 16 * 3600 + 18 * 60 + 25
+    assert parse_uptime("0 days 00:00:05") == 5
+    assert parse_uptime("1 day 02:00:00") == 86400 + 7200
+    assert parse_uptime("22:12:23") == 22 * 3600 + 12 * 60 + 23
+    assert parse_uptime("x.x") is None and parse_uptime("") is None and parse_uptime(None) is None

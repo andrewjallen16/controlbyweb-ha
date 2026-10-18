@@ -85,6 +85,9 @@
       },
       "reset_total_on_time": {
         "name": "Input {number} total on time reset"
+      },
+      "cancel_timer": {
+        "name": "Timer {number} cancel"
       }
     },
     "binary_sensor": {
@@ -131,6 +134,9 @@
       },
       "timer": {
         "name": "Timer {number}"
+      },
+      "uptime": {
+        "name": "Uptime"
       }
     },
     "number": {
@@ -150,6 +156,16 @@
         "duration": {
           "name": "Duration",
           "description": "Pulse length in seconds (0.1 to 86400)."
+        }
+      }
+    },
+    "start_timer": {
+      "name": "Start timer",
+      "description": "Starts a module timer counting down from the given number of seconds. A duration of 0 stops it. Use it on a Timer sensor.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "Seconds to count down from (0 stops the timer)."
         }
       }
     }

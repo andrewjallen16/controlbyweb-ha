@@ -44,14 +44,16 @@ class CBWEntity(CoordinatorEntity[CBWCoordinator]):
         elif number is not None:
             self._attr_translation_placeholders = {"number": str(number)}
 
-        model = entry.options.get(CONF_MODEL) or entry.data.get(CONF_MODEL) or "400 Series"
+        chosen = entry.options.get(CONF_MODEL) or entry.data.get(CONF_MODEL) or "400 Series"
+        diag = coordinator.diagnostics
         scheme = "https" if entry.data.get(CONF_SSL) else "http"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, uid)},
             connections={(CONNECTION_NETWORK_MAC, uid.lower())} if MAC_RE.match(uid) else set(),
-            name=f"ControlByWeb {model} ({entry.data[CONF_HOST]})",
+            name=f"ControlByWeb {chosen} ({entry.data[CONF_HOST]})",
             manufacturer="ControlByWeb (Xytronix)",
-            model=model,
+            model=diag.get("modelNumber") or chosen,  # e.g. "X-404-I" when the module reports it
+            sw_version=diag.get("firmwareRevision"),
             configuration_url=f"{scheme}://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}/setup.html",
         )
 

@@ -42,6 +42,7 @@ class CBWCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.client = client
         self.custom_names: dict[str, str] = {}
+        self.diagnostics: dict[str, str] = {}  # modelNumber, firmwareRevision... (read at setup)
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -50,6 +51,14 @@ class CBWCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise ConfigEntryAuthFailed from err
         except CBWError as err:
             raise UpdateFailed(f"Error talking to device: {err}") from err
+
+    async def async_load_diagnostics(self) -> None:
+        """Read the module's model number and firmware once per setup (optional)."""
+        try:
+            self.diagnostics = await self.client.get_diagnostics()
+        except CBWError as err:
+            _LOGGER.debug("diagnostics.xml not available (older firmware?): %s", err)
+            self.diagnostics = {}
 
     async def async_load_names(self) -> None:
         """Fetch the device's own I/O names (opt-in; read once per setup)."""

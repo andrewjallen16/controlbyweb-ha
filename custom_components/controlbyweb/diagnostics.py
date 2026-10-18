@@ -34,6 +34,7 @@ async def async_get_config_entry_diagnostics(
         },
         "summary": describe_state(coordinator.data),
         "guessed_model": guess_model(coordinator.data),
+        "device_diagnostics": async_redact_data(coordinator.diagnostics, TO_REDACT),
         "unhandled_keys": unhandled_keys(coordinator.data),
         "state": async_redact_data(coordinator.data, TO_REDACT),
         "custom_state": (

@@ -14,3 +14,21 @@ pulse:
           step: 0.1
           unit_of_measurement: s
           mode: box
+
+start_timer:
+  target:
+    entity:
+      integration: controlbyweb
+      domain: sensor
+      device_class: duration
+  fields:
+    duration:
+      required: true
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 16777215
+          step: 1
+          unit_of_measurement: s
+          mode: box

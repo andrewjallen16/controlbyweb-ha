@@ -4,6 +4,18 @@ Versions follow `custom_components/controlbyweb/manifest.json`. Download files a
 `ha-controlbyweb-v<version>.zip` (everything) and `ha-controlbyweb-v<version>-patch.zip`
 (only the files changed since the previous patch, so your README and manifest are not overwritten).
 
+## 0.9.0
+- Device card now shows the module's real model number (for example "X-404-I") and firmware version,
+  read from `diagnostics.xml` (no password needed; skipped quietly on firmware without it).
+- New diagnostic "Uptime" sensor, from `deviceUptime` in state.json (updates once a minute).
+- Setup pre-selects the model the module reports instead of guessing; the downloadable diagnostics
+  include the module's diagnostics.xml.
+
+## 0.8.0
+- Timers can now be controlled: new `controlbyweb.start_timer` service (seconds; 0 stops) and a
+  "Timer N cancel" button. Starting a timer with `state.json?timer1=30` was confirmed on an X-420;
+  stopping with `timer1=0` is assumed to work the same way.
+
 ## 0.7.2
 - Fix: sensors without a unit of their own (unit-less registers, analog inputs, counters) were never
   registered in Home Assistant.

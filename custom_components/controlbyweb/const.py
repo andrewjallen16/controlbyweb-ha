@@ -26,6 +26,8 @@ UNIT_NONE = "none"
 
 SERVICE_PULSE = "pulse"
 ATTR_DURATION = "duration"
+SERVICE_START_TIMER = "start_timer"
+MAX_TIMER = 16_777_215  # timers are 24-bit, 1 second resolution (400 series manual)
 MIN_PULSE = 0.1  # seconds, per the manual
 MAX_PULSE = 86400
 
@@ -88,6 +90,9 @@ _HANDLED_KEYS = (
     PREFIX_ANALOG_OUTPUT, PREFIX_REGISTER, PREFIX_ON_TIME, PREFIX_TOTAL_ON_TIME, PREFIX_COUNT,
     PREFIX_FREQUENCY, PREFIX_TIMER, KEY_FREQUENCY_INPUT, KEY_VIN,
 )
+
+_MODEL_RE = re.compile(r"^\s*(X-\d{3}[A-Z]?)", re.IGNORECASE)
+_UPTIME_RE = re.compile(r"^\s*(?:(\d+)\s*d(?:ays?)?\s+)?(\d+):(\d{2}):(\d{2})\s*$", re.IGNORECASE)
 
 MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 _NUMBER_RE = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(.*?)\s*$")
@@ -280,3 +285,19 @@ def describe_state(data: dict[str, Any]) -> str:
         if n:
             parts.append(f"{n} {label if n == 1 else plural}")
     return ", ".join(parts) or "no I/O assigned yet"
+
+
+def model_from_number(model_number: str | None) -> str | None:
+    """'X-404-I' (as reported by diagnostics.xml) -> 'X-404', matched against MODELS."""
+    if not model_number or not (match := _MODEL_RE.match(str(model_number))):
+        return None
+    model = match.group(1).upper()
+    return model if model in MODELS else "Other 400 series"
+
+
+def parse_uptime(value: Any) -> int | None:
+    """'1 days 22:12:23' -> seconds (166343). Returns None for anything else."""
+    if value is None or not (match := _UPTIME_RE.match(str(value))):
+        return None
+    days, hours, minutes, seconds = (int(part or 0) for part in match.groups())
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds

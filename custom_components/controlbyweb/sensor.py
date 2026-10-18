@@ -1,18 +1,29 @@
 """Sensors: 1-Wire, analog inputs, frequency, counters, timers, Vin, registers."""
 from __future__ import annotations
 
+import voluptuous as vol
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfElectricPotential, UnitOfFrequency, UnitOfTime
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfElectricPotential,
+    UnitOfFrequency,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CBWConfigEntry
 from .const import (
+    ATTR_DURATION,
     CONF_FREQUENCY_UNIT,
+    MAX_TIMER,
     CONF_ONEWIRE_UNIT,
     CONF_WRITABLE_REGISTERS,
     PREFIX_ANALOG_INPUT,
@@ -23,6 +34,7 @@ from .const import (
     PREFIX_REGISTER,
     PREFIX_TIMER,
     PREFIX_TOTAL_ON_TIME,
+    SERVICE_START_TIMER,
     SPEED_UNITS,
     UNIT_DEVICE_CLASS,
     UNIT_NONE,
@@ -30,6 +42,7 @@ from .const import (
     indexed_keys,
     is_configured,
     normalize_unit,
+    parse_uptime,
     parse_value,
     to_float,
     vin_keys,
@@ -94,10 +107,13 @@ def _build(entry: CBWConfigEntry, coordinator) -> list[SensorEntity]:
     for key, n in indexed_keys(data, PREFIX_TOTAL_ON_TIME):
         entities.append(CBWDurationSensor(coordinator, key, n, "input_total_on_time", True))
 
+    if "deviceUptime" in data:  # newer firmware reports it in state.json
+        entities.append(CBWUptimeSensor(coordinator, "deviceUptime"))
+
     # Timers (down counters, 1 s resolution). Read-only; only present if the device
     # lists them in state.json under timerN.
     for key, n in indexed_keys(data, PREFIX_TIMER):
-        entities.append(CBWDurationSensor(coordinator, key, n, "timer", False))
+        entities.append(CBWTimerSensor(coordinator, key, n))
 
     # Registers are read-only here unless "Allow writing registers" is on
     # (then number.py provides them instead). On an X-404 they may hold Modbus readings.
@@ -112,6 +128,12 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: CBWConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     async_setup_dynamic(entry, async_add_entities, _build)
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_START_TIMER,
+        {vol.Required(ATTR_DURATION): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_TIMER))},
+        "async_start_timer",
+    )
 
 
 class CBWSensor(CBWEntity, SensorEntity):
@@ -123,6 +145,10 @@ class CBWSensor(CBWEntity, SensorEntity):
     def __init__(self, coordinator, key: str, number: int | None, translation_key: str) -> None:
         super().__init__(coordinator, key, number)
         self._attr_translation_key = translation_key
+
+    async def async_start_timer(self, duration: int) -> None:
+        """Only timer sensors can be started (the service is offered on every sensor)."""
+        raise ServiceValidationError(f"{self.entity_id} is not a timer")
 
     @property
     def native_value(self) -> float | None:
@@ -219,3 +245,39 @@ class CBWDurationSensor(CBWSensor):
         self._attr_state_class = (
             SensorStateClass.TOTAL_INCREASING if total else SensorStateClass.MEASUREMENT
         )
+
+
+class CBWTimerSensor(CBWDurationSensor):
+    """Seconds left on a timer (a down counter). `state.json?timer1=30` starts it counting
+    down from 30 s and `timer1=0` stops it; the start command was confirmed on an X-420."""
+
+    def __init__(self, coordinator, key: str, number: int) -> None:
+        super().__init__(coordinator, key, number, "timer", False)
+
+    async def async_start_timer(self, duration: int) -> None:
+        await self.coordinator.async_send(**{self._key: int(duration)})
+
+
+class CBWUptimeSensor(CBWSensor):
+    """Time since the module last restarted. state.json gives it as text ("1 days 22:12:23");
+    it is published in seconds, rounded down to whole minutes so the sensor changes once a
+    minute instead of on every poll."""
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_suggested_unit_of_measurement = UnitOfTime.HOURS
+    _attr_suggested_display_precision = 1
+    _attr_state_class = None  # no long-term statistics for an uptime
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, key: str) -> None:
+        super().__init__(coordinator, key, None, "uptime")
+
+    @property
+    def native_value(self) -> int | None:
+        seconds = parse_uptime(self._raw)
+        return None if seconds is None else seconds // 60 * 60
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        return UnitOfTime.SECONDS  # the raw text is not "<number> <unit>"

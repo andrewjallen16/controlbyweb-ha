@@ -15,6 +15,12 @@ UID = "00:0C:C8:07:EC:AC"
 # yarl drops the default port, so the real request URL is http://HOST/state.json?... (no ":80")
 STATE_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/state\.json.*")
 CUSTOM_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/customState\.json.*")
+DIAG_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/diagnostics\.xml.*")
+DIAG_XML = (
+    "<datavalues><modelNumber>X-404-I</modelNumber><firmwareRevision>3.13.8.0</firmwareRevision>"
+    f"<serialNumber>{UID}</serialNumber><vin>25.1 V</vin><utcTime>1792289373</utcTime>"
+    "<timezoneOffset>-25200</timezoneOffset><deviceUptime>1 days 22:12:23</deviceUptime></datavalues>"
+)
 
 STATE = {
     "vin1": "25.0",
@@ -29,6 +35,7 @@ STATE = {
     "lat": "41.6796",
     "long": "-111.8737",
     "serialNumber": UID,
+    "deviceUptime": "1 days 22:12:23",
 }
 
 ENTRY_DATA = {
@@ -49,10 +56,16 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+def mock_diagnostics(mocker) -> None:
+    """The module also answers diagnostics.xml (model number, firmware)."""
+    mocker.get(DIAG_URL, text=DIAG_XML)
+
+
 @pytest.fixture
 def device(aioclient_mock):
-    """A fake 400 series module answering state.json."""
+    """A fake 400 series module answering state.json and diagnostics.xml."""
     aioclient_mock.get(STATE_URL, json=dict(STATE))
+    mock_diagnostics(aioclient_mock)
     return aioclient_mock
 
 
