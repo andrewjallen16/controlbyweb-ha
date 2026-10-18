@@ -1,7 +1,7 @@
 {
   "domain": "controlbyweb",
   "name": "ControlByWeb",
-  "codeowners": [@andrewjallen16],
+  "codeowners": ["@andrewjallen16"],
   "config_flow": true,
   "dhcp": [
     {
