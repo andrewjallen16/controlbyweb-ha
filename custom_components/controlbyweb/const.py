@@ -301,3 +301,28 @@ def parse_uptime(value: Any) -> int | None:
         return None
     days, hours, minutes, seconds = (int(part or 0) for part in match.groups())
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+# ---- power source (PoE vs DC). From the 400 series manual: "-E" models are Power Over Ethernet
+# and/or 9-28 VDC, "-I" models are DC only. A PoE-powered module reads 0 V on Vin; an -E module
+# draws from PoE while Vin is below 12 V and from the DC input above 12 V.
+POE_VIN_THRESHOLD = 1.0  # below this the Vin terminals are not supplying power
+POE_PRIORITY_VOLTAGE = 12.0
+POWER_SOURCES = ["poe", "dc_input"]
+
+
+def is_poe_model(model_number: str | None) -> bool:
+    """'X-420-E' -> True (PoE capable); 'X-404-I' -> False (DC only)."""
+    return bool(model_number) and re.search(r"-E$", str(model_number).strip(), re.IGNORECASE) is not None
+
+
+def power_source(vin: float | None, poe_model: bool) -> str | None:
+    """'poe' or 'dc_input' from the Vin reading. A module we can talk to that reads ~0 V on
+    Vin must be powered over Ethernet, whatever its model."""
+    if vin is None:
+        return None
+    if vin < POE_VIN_THRESHOLD:
+        return "poe"
+    if poe_model and vin <= POE_PRIORITY_VOLTAGE:
+        return "poe"
+    return "dc_input"

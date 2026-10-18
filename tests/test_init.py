@@ -18,6 +18,12 @@ def _eid(hass, domain, key):
     return er.async_get(hass).async_get_entity_id(domain, DOMAIN, f"{UID}_{key}")
 
 
+def _device(hass, entry):
+    """The module's device. (device_registry.async_get_device is deprecated: identifiers are no
+    longer unique across config entries, so look the device up through its config entry.)"""
+    return dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)[0]
+
+
 def _registered(hass):
     """Everything this integration registered, as 'domain:key' (for failure messages)."""
     registry = er.async_get(hass)
@@ -135,7 +141,7 @@ async def test_start_timer_on_a_non_timer_sensor_is_refused(hass, device, entry)
 
 async def test_device_card_shows_model_and_firmware(hass, device, entry):
     await _setup(hass, entry)
-    dev = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, UID)})
+    dev = _device(hass, entry)
     assert dev.model == "X-404-I"
     assert dev.sw_version == "3.13.8.0"
 
@@ -144,7 +150,7 @@ async def test_setup_works_without_diagnostics_xml(hass, aioclient_mock, entry):
     aioclient_mock.get(STATE_URL, json=dict(STATE))
     aioclient_mock.get(DIAG_URL, status=404)  # older firmware
     await _setup(hass, entry)
-    dev = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, UID)})
+    dev = _device(hass, entry)
     assert dev.sw_version is None
     assert dev.model == "X-404"  # falls back to the model chosen at setup
 
@@ -158,3 +164,47 @@ async def test_uptime_sensor(hass, device, entry):
     seconds = float(state.state) * {"s": 1, "min": 60, "h": 3600, "d": 86400}[unit]
     assert abs(seconds - 166320) < 400  # 1 d 22:12:23, rounded down to the minute
     assert state.attributes["device_class"] == "duration"
+
+
+async def test_poe_powered_module_has_no_zero_volt_supply_sensor(hass, aioclient_mock, entry):
+    aioclient_mock.get(STATE_URL, json={**STATE, "vin1": "0"})  # PoE: Vin terminals read 0 V
+    mock_diagnostics(aioclient_mock, model="X-404-E")
+    await _setup(hass, entry)
+    assert not _eid(hass, "sensor", "vin1")
+    source = _eid(hass, "sensor", "powerSource")
+    assert source
+    assert hass.states.get(source).state == "poe"
+
+
+async def test_dc_powered_poe_capable_module(hass, aioclient_mock, entry):
+    aioclient_mock.get(STATE_URL, json=dict(STATE))  # vin1 = 25.0 V
+    mock_diagnostics(aioclient_mock, model="X-404-E")
+    await _setup(hass, entry)
+    assert _eid(hass, "sensor", "vin1")
+    assert hass.states.get(_eid(hass, "sensor", "powerSource")).state == "dc_input"
+
+
+async def test_dc_only_module_has_supply_voltage_but_no_power_source(hass, device, entry):
+    await _setup(hass, entry)  # X-404-I on 25 V
+    assert _eid(hass, "sensor", "vin1")
+    assert not _eid(hass, "sensor", "powerSource")
+
+
+async def test_existing_zero_volt_supply_entity_is_removed_once(hass, aioclient_mock, entry):
+    entry.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create("sensor", DOMAIN, f"{UID}_vin1", config_entry=entry)
+    aioclient_mock.get(STATE_URL, json={**STATE, "vin1": "0"})
+    mock_diagnostics(aioclient_mock, model="X-404-E")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not _eid(hass, "sensor", "vin1")
+
+
+async def test_poe_module_without_vin_in_state_uses_diagnostics_xml(hass, aioclient_mock, entry):
+    # older firmware: no Vin in state.json, but diagnostics.xml says <vin>POE</vin>
+    state = {k: v for k, v in STATE.items() if k != "vin1"}
+    aioclient_mock.get(STATE_URL, json=state)
+    mock_diagnostics(aioclient_mock, model="X-401-E", vin="POE")
+    await _setup(hass, entry)
+    assert not _eid(hass, "sensor", "vin1")
+    assert hass.states.get(_eid(hass, "sensor", "powerSource")).state == "poe"

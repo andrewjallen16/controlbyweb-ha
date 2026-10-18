@@ -34,6 +34,7 @@ from .const import (
     PREFIX_REGISTER,
     PREFIX_TIMER,
     PREFIX_TOTAL_ON_TIME,
+    POE_VIN_THRESHOLD,
     SERVICE_START_TIMER,
     SPEED_UNITS,
     UNIT_DEVICE_CLASS,
@@ -41,9 +42,11 @@ from .const import (
     frequency_input_keys,
     indexed_keys,
     is_configured,
+    is_poe_model,
     normalize_unit,
     parse_uptime,
     parse_value,
+    power_source,
     to_float,
     vin_keys,
 )
@@ -92,10 +95,29 @@ def _build(entry: CBWConfigEntry, coordinator) -> list[SensorEntity]:
 
     vins = vin_keys(data)
     for key, n in vins:
+        # A module powered over Ethernet reads 0 V on Vin: not a measurement, so no entity
+        # (unless one already exists; it then shows "unknown" instead of 0 V).
+        vin_value = to_float(data[key])
+        if vin_value is not None and vin_value < POE_VIN_THRESHOLD and key not in seen:
+            continue
         if len(vins) == 1:
             entities.append(CBWVinSensor(coordinator, key, None, "supply_voltage"))
         else:
             entities.append(CBWVinSensor(coordinator, key, n, "supply_voltage_n"))
+
+    # Power source (PoE / DC input): only where it can be PoE, i.e. an "-E" model, a module that
+    # reads 0 V on Vin, or one whose diagnostics.xml says <vin>POE</vin>; once created it stays.
+    vin_key = vins[0][0] if vins else None
+    vin_value = to_float(data[vin_key]) if vin_key else None
+    diag = coordinator.diagnostics
+    says_poe = str(diag.get("vin", "")).strip().upper() == "POE"
+    if (vin_key is not None or "vin" in diag) and (
+        is_poe_model(diag.get("modelNumber"))
+        or says_poe
+        or (vin_value is not None and vin_value < POE_VIN_THRESHOLD)
+        or "powerSource" in seen
+    ):
+        entities.append(CBWPowerSourceSensor(coordinator, vin_key))
 
     # Input functions (only present when assigned a Local I/O number on the device)
     for key, n in indexed_keys(data, PREFIX_FREQUENCY):
@@ -225,6 +247,12 @@ class CBWVinSensor(CBWSensor):
     _attr_device_class = SensorDeviceClass.VOLTAGE
     _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
 
+    @property
+    def native_value(self) -> float | None:
+        value = to_float(self._raw)
+        # Powered over Ethernet: the Vin terminals read 0, which is not a measurement
+        return None if value is not None and value < POE_VIN_THRESHOLD else value
+
 
 class CBWFrequencySensor(CBWSensor):
     _attr_device_class = SensorDeviceClass.FREQUENCY
@@ -281,3 +309,42 @@ class CBWUptimeSensor(CBWSensor):
     @property
     def native_unit_of_measurement(self) -> str:
         return UnitOfTime.SECONDS  # the raw text is not "<number> <unit>"
+
+
+class CBWPowerSourceSensor(CBWEntity, SensorEntity):
+    """Where the module gets its power: Power over Ethernet or the DC input.
+
+    Worked out from the Vin reading in state.json (0 V means PoE) and, for "-E" models, the
+    manual's rule that PoE is used while Vin is at or below 12 V. Between 1 and 12 V on an "-E"
+    module PoE and a backup supply can't be told apart, and PoE is reported. Modules whose Vin is
+    not in state.json (older firmware) fall back to diagnostics.xml, which says <vin>POE</vin>
+    when powered over Ethernet."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["poe", "dc_input"]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "power_source"
+
+    def __init__(self, coordinator, vin_key: str | None) -> None:
+        # The Vin key is only where the live reading comes from; the device's own name for
+        # Vin must not become this entity's name.
+        super().__init__(coordinator, vin_key or "vin", use_custom_name=False)
+        self._vin_key = vin_key
+        self._attr_unique_id = f"{coordinator.config_entry.unique_id}_powerSource"
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self.native_value is not None
+
+    @property
+    def native_value(self) -> str | None:
+        diag = self.coordinator.diagnostics
+        poe_model = is_poe_model(diag.get("modelNumber"))
+        if self._vin_key is not None:
+            vin = to_float(self.coordinator.data.get(self._vin_key))
+            if vin is not None:
+                return power_source(vin, poe_model)
+        raw = str(diag.get("vin", "")).strip()  # "POE" on a PoE module, otherwise e.g. "25.2 V"
+        if raw.upper() == "POE":
+            return "poe"
+        return power_source(to_float(raw), poe_model)

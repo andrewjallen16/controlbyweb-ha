@@ -48,6 +48,7 @@ Add the integration once per module. If DHCP gives a module a new IP address, di
 | `registerN` | Sensor (read-only by default), or Number if writing is enabled |
 | `analogOutputN` | Number (writable) |
 | `timerN` | Sensor (seconds remaining) + "Timer N cancel" button; start it with the `controlbyweb.start_timer` service |
+| `vin` / `vin1` on PoE-capable modules | Diagnostic "Power source" sensor (PoE or DC input) |
 | `deviceUptime` | Diagnostic "Uptime" sensor (newer firmware; changes once a minute) |
 
 - Sensors the device reports as `x.x` (unplugged probe, unused register) are shown as **unavailable**, or skipped if they were never configured. If one is connected or configured later it **appears without reloading** the integration.
@@ -97,6 +98,7 @@ Device page -> three-dot menu -> **Download diagnostics**. Passwords, usernames,
 - Defaults: admin login `admin` / `webrelay`; the Control Page needs no password unless you enable one (which also disables Modbus/TCP, not used here). Change default passwords.
 
 ## Notes and limits
+- **PoE:** "-E" models (for example X-420-E) can be powered over Ethernet; "-I" models are DC only. A PoE-powered module reads 0 V on its Vin terminals (the manual says so), which isn't a measurement, so no "Supply voltage" entity is created for it. Instead a diagnostic **Power source** sensor reports PoE or DC input: PoE when Vin reads about 0 V, or (on "-E" models) is at or below 12 V, which is where the module prefers PoE; DC input above that. Between 1 and 12 V on an "-E" module, PoE and a backup supply can't be told apart. Connect a DC supply later and the supply-voltage sensor appears by itself.
 - **Model and firmware:** on firmware that provides `/diagnostics.xml` (no password needed) the device card shows the module's own model number (e.g. "X-404-I") and firmware version, and the setup screen pre-selects the model it reports. On older firmware the model you choose is shown and no firmware version is available. Both are read when the integration loads, so reload it after a firmware update.
 - **X-404 registers:** Modbus readings appear as `registerN`. That's why registers are read-only by default; enabling writes on an X-404 can write to the Modbus device behind a register.
 - **X-417 analog outputs:** the manuals don't give the `state.json` key; `analogOutputN` is assumed and unverified. Values are in the engineering units set on the device and the Number entity does not limit the range, so check your output scaling before writing to a valve or actuator.

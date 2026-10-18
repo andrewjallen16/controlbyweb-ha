@@ -16,11 +16,17 @@ UID = "00:0C:C8:07:EC:AC"
 STATE_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/state\.json.*")
 CUSTOM_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/customState\.json.*")
 DIAG_URL = re.compile(rf"http://{re.escape(HOST)}(:80)?/diagnostics\.xml.*")
-DIAG_XML = (
-    "<datavalues><modelNumber>X-404-I</modelNumber><firmwareRevision>3.13.8.0</firmwareRevision>"
-    f"<serialNumber>{UID}</serialNumber><vin>25.1 V</vin><utcTime>1792289373</utcTime>"
-    "<timezoneOffset>-25200</timezoneOffset><deviceUptime>1 days 22:12:23</deviceUptime></datavalues>"
-)
+
+
+def diag_xml(model: str = "X-404-I", vin: str = "25.1 V") -> str:
+    return (
+        f"<datavalues><modelNumber>{model}</modelNumber><firmwareRevision>3.13.8.0</firmwareRevision>"
+        f"<serialNumber>{UID}</serialNumber><vin>{vin}</vin><utcTime>1792289373</utcTime>"
+        "<timezoneOffset>-25200</timezoneOffset><deviceUptime>1 days 22:12:23</deviceUptime></datavalues>"
+    )
+
+
+DIAG_XML = diag_xml()
 
 STATE = {
     "vin1": "25.0",
@@ -56,9 +62,9 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
-def mock_diagnostics(mocker) -> None:
+def mock_diagnostics(mocker, model: str = "X-404-I", vin: str = "25.1 V") -> None:
     """The module also answers diagnostics.xml (model number, firmware)."""
-    mocker.get(DIAG_URL, text=DIAG_XML)
+    mocker.get(DIAG_URL, text=diag_xml(model, vin))
 
 
 @pytest.fixture

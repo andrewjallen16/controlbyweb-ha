@@ -32,6 +32,7 @@ class CBWEntity(CoordinatorEntity[CBWCoordinator]):
         key: str,
         number: int | None = None,
         name_suffix: str | None = None,
+        use_custom_name: bool = True,
     ) -> None:
         super().__init__(coordinator)
         entry = coordinator.config_entry
@@ -39,7 +40,7 @@ class CBWEntity(CoordinatorEntity[CBWCoordinator]):
         self._key = key
         self._attr_unique_id = f"{uid}_{key}"
 
-        if custom := coordinator.custom_names.get(key):
+        if use_custom_name and (custom := coordinator.custom_names.get(key)):
             self._attr_name = f"{custom} {name_suffix}" if name_suffix else custom
         elif number is not None:
             self._attr_translation_placeholders = {"number": str(number)}

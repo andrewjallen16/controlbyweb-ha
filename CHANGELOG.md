@@ -4,6 +4,12 @@ Versions follow `custom_components/controlbyweb/manifest.json`. Download files a
 `ha-controlbyweb-v<version>.zip` (everything) and `ha-controlbyweb-v<version>-patch.zip`
 (only the files changed since the previous patch, so your README and manifest are not overwritten).
 
+## 0.9.1
+- Modules powered over Ethernet (PoE) read 0 V on the Vin terminals, so "Supply voltage 0 V" is no longer
+  created for them; an existing one is removed once. It comes back by itself if a DC supply is connected.
+- New diagnostic "Power source" sensor (PoE or DC input) on modules where it applies: "-E" models
+  (PoE and/or DC; the model number comes from diagnostics.xml) and any module that reads 0 V on Vin.
+
 ## 0.9.0
 - Device card now shows the module's real model number (for example "X-404-I") and firmware version,
   read from `diagnostics.xml` (no password needed; skipped quietly on firmware without it).

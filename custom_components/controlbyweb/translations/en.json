@@ -137,6 +137,13 @@
       },
       "uptime": {
         "name": "Uptime"
+      },
+      "power_source": {
+        "name": "Power source",
+        "state": {
+          "poe": "PoE",
+          "dc_input": "DC input"
+        }
       }
     },
     "number": {

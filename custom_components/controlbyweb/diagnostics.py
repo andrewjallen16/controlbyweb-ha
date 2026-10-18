@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from . import CBWConfigEntry
 from .api import CBWError
-from .const import KEY_SERIAL, describe_state, guess_model, unhandled_keys
+from .const import KEY_SERIAL, describe_state, guess_model, is_poe_model, unhandled_keys
 
 TO_REDACT = {CONF_PASSWORD, CONF_USERNAME, CONF_HOST, KEY_SERIAL, "lat", "long"}
 
@@ -35,6 +35,7 @@ async def async_get_config_entry_diagnostics(
         "summary": describe_state(coordinator.data),
         "guessed_model": guess_model(coordinator.data),
         "device_diagnostics": async_redact_data(coordinator.diagnostics, TO_REDACT),
+        "poe_capable_model": is_poe_model(coordinator.diagnostics.get("modelNumber")),
         "unhandled_keys": unhandled_keys(coordinator.data),
         "state": async_redact_data(coordinator.data, TO_REDACT),
         "custom_state": (

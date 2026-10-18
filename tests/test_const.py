@@ -11,6 +11,8 @@ from custom_components.controlbyweb.const import (
     normalize_unit,
     parse_value,
     UNIT_DEVICE_CLASS,
+    is_poe_model,
+    power_source,
     model_from_number,
     parse_uptime,
     unhandled_keys,
@@ -158,3 +160,20 @@ def test_parse_uptime():
     assert parse_uptime("1 day 02:00:00") == 86400 + 7200
     assert parse_uptime("22:12:23") == 22 * 3600 + 12 * 60 + 23
     assert parse_uptime("x.x") is None and parse_uptime("") is None and parse_uptime(None) is None
+
+
+def test_is_poe_model():
+    assert is_poe_model("X-420-E") and is_poe_model("X-410-e") and is_poe_model("X-401-E ")
+    assert not is_poe_model("X-404-I") and not is_poe_model("X-420-I")
+    assert not is_poe_model(None) and not is_poe_model("")
+
+
+def test_power_source():
+    # a module we can reach that reads ~0 V on Vin is powered over Ethernet, whatever its model
+    assert power_source(0.0, True) == "poe" and power_source(0.0, False) == "poe"
+    # "-E" models use PoE while Vin is at or below 12 V (manual), the DC input above that
+    assert power_source(11.5, True) == "poe" and power_source(12.0, True) == "poe"
+    assert power_source(12.1, True) == "dc_input" and power_source(25.0, True) == "dc_input"
+    # DC-only models are never "PoE" unless Vin reads 0
+    assert power_source(9.5, False) == "dc_input" and power_source(25.1, False) == "dc_input"
+    assert power_source(None, True) is None

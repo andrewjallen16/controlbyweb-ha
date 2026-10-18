@@ -48,7 +48,7 @@ PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWO
 
 class CBWConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 2  # 2 = created by 0.6.0+: no legacy entities to clean up
+    MINOR_VERSION = 3  # created by 0.9.1+: no legacy entities to clean up
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
